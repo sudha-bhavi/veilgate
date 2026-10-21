@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+.env
+*.pem
+node_modules/
+dist/
+TestResults/

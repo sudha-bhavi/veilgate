@@ -1,0 +1,14 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY Directory.Build.props global.json ./
+COPY src ./src
+RUN dotnet restore src/VeilGate.Api/VeilGate.Api.csproj
+RUN dotnet publish src/VeilGate.Api/VeilGate.Api.csproj -c Release -o /out --no-restore /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
+WORKDIR /app
+COPY --from=build /out .
+ENV ASPNETCORE_URLS=http://+:8080 DOTNET_EnableDiagnostics=0
+USER app
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "VeilGate.Api.dll"]
