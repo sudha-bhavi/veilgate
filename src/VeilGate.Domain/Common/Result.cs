@@ -9,9 +9,10 @@ public sealed record Error(string Code, string Message, ErrorKind Kind = ErrorKi
     public static Error Conflict(string code, string message) => new(code, message, ErrorKind.Conflict);
     public static Error Forbidden(string code = "auth.forbidden", string message = "Forbidden") => new(code, message, ErrorKind.Forbidden);
     public static Error Unauthorized(string code, string message) => new(code, message, ErrorKind.Unauthorized);
+    public static Error Locked(string code, string message) => new(code, message, ErrorKind.Locked);
 }
 
-public enum ErrorKind { Failure, Validation, NotFound, Conflict, Forbidden, Unauthorized }
+public enum ErrorKind { Failure, Validation, NotFound, Conflict, Forbidden, Unauthorized, Locked }
 
 public class Result
 {

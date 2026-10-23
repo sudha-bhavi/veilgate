@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace VeilGate.Api.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/v1/system")]
 public sealed class SystemController : ControllerBase
 {

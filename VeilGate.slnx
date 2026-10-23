@@ -10,5 +10,6 @@
     <Project Path="tests/VeilGate.Api.Tests/VeilGate.Api.Tests.csproj" />
     <Project Path="tests/VeilGate.Domain.Tests/VeilGate.Domain.Tests.csproj" />
     <Project Path="tests/VeilGate.Infrastructure.Tests/VeilGate.Infrastructure.Tests.csproj" />
+    <Project Path="tests/VeilGate.TestSupport/VeilGate.TestSupport.csproj" />
   </Folder>
 </Solution>

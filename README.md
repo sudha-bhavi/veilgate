@@ -82,3 +82,24 @@ and `using VeilGate.Infrastructure.Persistence.Sql;` at the top. Then:
 dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
 dotnet test
 ```
+
+## M1b: login, Argon2id, JWT (ES256), JWKS
+
+New project `tests/VeilGate.TestSupport` (shared throwaway-Postgres helper). Register it, restore and test:
+
+```bash
+./setup.sh                      # recreates VeilGate.slnx with the new project
+dotnet build
+dotnet test                     # first run downloads a NuGet package or two
+```
+
+No new migration is needed. To try it by hand, create a user in the dev database (see `docs/` for the seed script when it lands), then:
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/VeilGate.Api
+curl -s http://localhost:5000/.well-known/jwks.json
+curl -s -X POST http://localhost:5000/api/v1/auth/login -H 'Content-Type: application/json' -d '{"email":"a@b.test","password":"x"}'
+```
+
+In Development the API creates a temporary signing key at startup. In any other environment you must set `Auth__Keys__0__Kid` and `Auth__Keys__0__PrivateKeyPem`
+(generate with `openssl ecparam -name prime256v1 -genkey -noout`).

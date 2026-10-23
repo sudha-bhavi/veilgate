@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using VeilGate.Domain;
 using VeilGate.Infrastructure.Persistence;
+using VeilGate.TestSupport;
 using Xunit;
 
 namespace VeilGate.Infrastructure.Tests;

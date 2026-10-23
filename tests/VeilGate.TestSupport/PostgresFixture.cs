@@ -4,7 +4,7 @@ using Testcontainers.PostgreSql;
 using VeilGate.Infrastructure.Persistence;
 using Xunit;
 
-namespace VeilGate.Infrastructure.Tests;
+namespace VeilGate.TestSupport;
 
 /// <summary>
 /// Starts a throwaway PostgreSQL 16 in Docker, creates the same least-privilege roles as deploy/postgres/init.sh,
@@ -16,9 +16,15 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public string AdminConnection => _pg.GetConnectionString();
 
-    public string AppConnection => new NpgsqlConnectionStringBuilder(_pg.GetConnectionString())
+    /// <summary>vg_app with a single pooled connection. Forces connection reuse, which would expose any tenant-setting leak.</summary>
+    public string AppConnection => AppConnectionString(maxPool: 1);
+
+    /// <summary>vg_app with a normal pool, for tests that run the whole API.</summary>
+    public string AppConnectionForApi => AppConnectionString(maxPool: 20);
+
+    private string AppConnectionString(int maxPool) => new NpgsqlConnectionStringBuilder(_pg.GetConnectionString())
     {
-        Username = "vg_app", Password = "app-pw", Pooling = true, MaxPoolSize = 1, // one physical connection forces reuse, which exposes any setting leak
+        Username = "vg_app", Password = "app-pw", Pooling = true, MaxPoolSize = maxPool,
     }.ConnectionString;
 
     public async Task InitializeAsync()
@@ -47,11 +53,9 @@ public sealed class PostgresFixture : IAsyncLifetime
         await db.Database.MigrateAsync();
     }
 
+    /// <summary>A context connected as the superuser. It bypasses row-level security, so tests use it only to seed and inspect data.</summary>
     public VeilGateDbContext AdminContext()
         => new(new DbContextOptionsBuilder<VeilGateDbContext>().UseNpgsql(AdminConnection).Options);
 
     public Task DisposeAsync() => _pg.DisposeAsync().AsTask();
 }
-
-[CollectionDefinition("postgres")]
-public sealed class PostgresCollection : ICollectionFixture<PostgresFixture> { }

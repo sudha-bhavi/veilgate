@@ -1,8 +1,15 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using VeilGate.Api.Middleware;
 using VeilGate.Api.Options;
+using VeilGate.Api.Security;
 using VeilGate.Application;
+using VeilGate.Application.Abstractions;
 using VeilGate.Infrastructure;
 
 Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
@@ -20,6 +27,53 @@ try
     builder.Services.AddOptions<AppCorsOptions>().BindConfiguration(AppCorsOptions.Section).ValidateDataAnnotations()
         .Validate(o => o.AllowedOrigins.All(x => x != "*" && Uri.TryCreate(x, UriKind.Absolute, out _)), "Cors origins must be exact absolute URLs, no wildcard.")
         .ValidateOnStart();
+
+    builder.Services.AddOptions<AuthOptions>().BindConfiguration(AuthOptions.Section).ValidateDataAnnotations().ValidateOnStart();
+    builder.Services.AddSingleton<ISigningKeyProvider, SigningKeyProvider>();
+    builder.Services.AddSingleton<ITokenService, TokenService>();
+
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+    builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+        .Configure<ISigningKeyProvider, IOptions<AuthOptions>>((jwt, keys, auth) =>
+        {
+            jwt.MapInboundClaims = false;   // keep claim names exactly as issued: sub, tid, role, ver
+            jwt.SaveToken = false;
+            jwt.RequireHttpsMetadata = false; // no discovery document is used; keys come from our own provider
+            jwt.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true, ValidIssuer = auth.Value.Issuer,
+                ValidateAudience = true, ValidAudience = auth.Value.Audience,
+                ValidateLifetime = true, RequireExpirationTime = true, ClockSkew = TimeSpan.FromSeconds(30),
+                RequireSignedTokens = true, ValidateIssuerSigningKey = true,
+                ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],   // blocks "none" and HS256 key-confusion tricks
+                ValidTypes = [TokenService.AccessTokenType],           // an MFA-step token is not an access token
+                IssuerSigningKeyResolver = (_, _, kid, _) => keys.ValidationKeys.Where(k => k.KeyId == kid),
+                NameClaimType = "sub", RoleClaimType = "role"
+            };
+        });
+    builder.Services.AddAuthorization();
+
+    builder.Services.AddRateLimiter(o =>
+    {
+        o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        o.OnRejected = async (ctx, ct) =>
+        {
+            var res = ctx.HttpContext.Response;
+            var wait = ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retry) ? (int)Math.Ceiling(retry.TotalSeconds) : 60;
+            res.Headers.RetryAfter = wait.ToString();
+            var problem = new ProblemDetails { Status = 429, Title = "Too many attempts. Try again later." };
+            problem.Extensions["code"] = "rate_limit.exceeded";
+            await res.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json", cancellationToken: ct);
+        };
+        o.AddPolicy("login", http => RateLimitPartition.GetFixedWindowLimiter(
+            http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = http.RequestServices.GetRequiredService<IOptions<AuthOptions>>().Value.LoginRateLimitPerMinute,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+    });
 
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
@@ -48,10 +102,15 @@ try
     app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseSerilogRequestLogging(o => o.GetLevel = (_, _, ex) => ex is null ? Serilog.Events.LogEventLevel.Information : Serilog.Events.LogEventLevel.Error);
     app.UseCors();
+    app.UseRateLimiter();
+    app.UseAuthentication();                       // 1. who is calling? (verifies the token signature, issuer, audience, expiry)
+    app.UseMiddleware<TenantResolutionMiddleware>(); // 2. which tenant? only from the signed token, then check the token is still valid
+    app.UseAuthorization();                        // 3. may they do this? (controllers require a token unless [AllowAnonymous])
 
-    // Authentication, tenant resolution and authorization are added in milestone M1.
-    app.MapControllers();
-    app.MapHealthChecks("/health/live", new() { Predicate = r => r.Tags.Contains("live") });
+    // Secure by default: every controller endpoint needs a valid token unless it is explicitly marked [AllowAnonymous].
+    // Unknown URLs still get a plain 404, so the API does not behave differently for signed-out callers.
+    app.MapControllers().RequireAuthorization();
+    app.MapHealthChecks("/health/live", new() { Predicate = r => r.Tags.Contains("live") }).AllowAnonymous();
 
     app.Run();
 }
