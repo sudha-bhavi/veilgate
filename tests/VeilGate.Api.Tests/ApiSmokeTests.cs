@@ -1,9 +1,9 @@
+using Microsoft.AspNetCore.Hosting;
 using System.Net;
 using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
-using Microsoft.AspNetCore.Hosting;
 
 namespace VeilGate.Api.Tests;
 

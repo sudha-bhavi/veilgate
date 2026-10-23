@@ -19,7 +19,7 @@ public sealed class Tenant : Entity
 
     public Result Suspend()
     {
-           if (Status == "Suspended") return Result.Failure(Error.Conflict("resource.conflict", "Tenant is already suspended."));
+        if (Status == "Suspended") return Result.Failure(Error.Conflict("resource.conflict", "Tenant is already suspended."));
         Status = "Suspended";
         return Result.Success();
     }

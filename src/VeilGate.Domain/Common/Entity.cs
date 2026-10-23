@@ -12,4 +12,5 @@ public abstract class TenantEntity : Entity
     public Guid TenantId { get; protected set; }
     protected TenantEntity() { }
     protected TenantEntity(Guid tenantId) => TenantId = tenantId;
+    protected void SetTenant(Guid tenantId) => TenantId = tenantId;
 }

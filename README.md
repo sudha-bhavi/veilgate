@@ -55,3 +55,30 @@ src/VeilGate.Workers         background services (outbox, purger, evaluations)
 tests/                       xUnit tests
 deploy/                      Docker Compose, Dockerfiles, Postgres init, WireMock
 ```
+
+## M1a: database schema and row-level security
+
+```bash
+dotnet tool restore                      # installs dotnet-ef from .config/dotnet-tools.json
+dotnet sln VeilGate.slnx add tests/VeilGate.Infrastructure.Tests
+docker compose -f deploy/docker-compose.yml --env-file .env down -v   # re-runs init.sh (adds vg_platform, vg_audit_writer)
+docker compose -f deploy/docker-compose.yml --env-file .env up -d
+
+dotnet ef migrations add InitialSchema --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api --output-dir Persistence/Migrations
+```
+
+Open the generated `Persistence/Migrations/<timestamp>_InitialSchema.cs` and add these lines at the **end** of `Up(...)`, before its closing brace:
+
+```csharp
+migrationBuilder.CreateTenantFunction();
+migrationBuilder.ProtectTenantsTable();
+migrationBuilder.ProtectTenantTable("users");
+migrationBuilder.CreateLoginLookupFunction();
+```
+
+and `using VeilGate.Infrastructure.Persistence.Sql;` at the top. Then:
+
+```bash
+dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
+dotnet test
+```
