@@ -9,6 +9,8 @@ public static class DependencyInjection
     {
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
         services.AddScoped<Auth.LoginHandler>();
+                services.AddScoped<Auth.StartTotpEnrollmentHandler>();
+        services.AddScoped<Auth.ConfirmTotpHandler>();
         return services;
     }
 }

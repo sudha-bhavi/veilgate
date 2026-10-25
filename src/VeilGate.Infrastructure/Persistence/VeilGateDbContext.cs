@@ -7,6 +7,7 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<User> Users => Set<User>();
+        public DbSet<MfaFactor> MfaFactors => Set<MfaFactor>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -53,6 +54,29 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
                 t.HasCheckConstraint("ck_users_failed_attempts", "failed_attempts >= 0");
                 t.HasCheckConstraint("ck_users_token_version", "token_version >= 1");
             });
+        });
+
+                b.Entity<MfaFactor>(e =>
+        {
+            e.ToTable("mfa_factors");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.UserId).HasColumnName("user_id").IsRequired();
+            e.Property(x => x.Type).HasColumnName("type").HasConversion<string>().HasMaxLength(16).IsRequired();
+            e.Property(x => x.ProtectedSecret).HasColumnName("protected_secret").IsRequired();
+            e.Property(x => x.IsConfirmed).HasColumnName("is_confirmed");
+            e.Property(x => x.ConfirmedAt).HasColumnName("confirmed_at");
+            e.Property(x => x.LastUsedCounter).HasColumnName("last_used_counter").HasDefaultValue(-1L);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+
+            // A user has at most one factor of each type.
+            e.HasIndex(x => new { x.UserId, x.Type }).IsUnique().HasDatabaseName("ux_mfa_factors_user_type");
+            e.ToTable(t => t.HasCheckConstraint("ck_mfa_factors_type", "type in ('Totp')"));
         });
     }
 }

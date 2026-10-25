@@ -23,6 +23,67 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("VeilGate.Domain.MfaFactor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsConfirmed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_confirmed");
+
+                    b.Property<long>("LastUsedCounter")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(-1L)
+                        .HasColumnName("last_used_counter");
+
+                    b.Property<string>("ProtectedSecret")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protected_secret");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("UserId", "Type")
+                        .IsUnique()
+                        .HasDatabaseName("ux_mfa_factors_user_type");
+
+                    b.ToTable("mfa_factors", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_mfa_factors_type", "type in ('Totp')");
+                        });
+                });
+
             modelBuilder.Entity("VeilGate.Domain.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -144,6 +205,21 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_users_token_version", "token_version >= 1");
                         });
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.MfaFactor", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VeilGate.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("VeilGate.Domain.User", b =>
