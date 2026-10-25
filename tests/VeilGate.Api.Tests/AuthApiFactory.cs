@@ -26,5 +26,6 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Auth:Keys:0:Kid", Kid);
         builder.UseSetting("Auth:Keys:0:PrivateKeyPem", _privatePem);
         builder.UseSetting("Auth:LoginRateLimitPerMinute", "1000");
+                builder.UseSetting("Security:MfaEncryptionKey", Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
     }
 }

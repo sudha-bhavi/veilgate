@@ -32,25 +32,41 @@ try
     builder.Services.AddSingleton<ISigningKeyProvider, SigningKeyProvider>();
     builder.Services.AddSingleton<ITokenService, TokenService>();
 
-    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+        // Two token checks that differ only in audience and type: the normal access token, and the short "password done, MFA pending" token.
+    static TokenValidationParameters ValidationFor(AuthOptions auth, ISigningKeyProvider keys, string audience, string tokenType) => new()
+    {
+        ValidateIssuer = true, ValidIssuer = auth.Issuer,
+        ValidateAudience = true, ValidAudience = audience,
+        ValidateLifetime = true, RequireExpirationTime = true, ClockSkew = TimeSpan.FromSeconds(30),
+        RequireSignedTokens = true, ValidateIssuerSigningKey = true,
+        ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],   // blocks "none" and HS256 key-confusion tricks
+        ValidTypes = [tokenType],                              // each scheme accepts exactly one kind of token
+        IssuerSigningKeyResolver = (_, _, kid, _) => keys.ValidationKeys.Where(k => k.KeyId == kid),
+        NameClaimType = "sub", RoleClaimType = "role"
+    };
+
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer()
+        .AddJwtBearer(TokenService.MfaChallengeScheme, _ => { });
+
     builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
         .Configure<ISigningKeyProvider, IOptions<AuthOptions>>((jwt, keys, auth) =>
         {
             jwt.MapInboundClaims = false;   // keep claim names exactly as issued: sub, tid, role, ver
             jwt.SaveToken = false;
             jwt.RequireHttpsMetadata = false; // no discovery document is used; keys come from our own provider
-            jwt.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true, ValidIssuer = auth.Value.Issuer,
-                ValidateAudience = true, ValidAudience = auth.Value.Audience,
-                ValidateLifetime = true, RequireExpirationTime = true, ClockSkew = TimeSpan.FromSeconds(30),
-                RequireSignedTokens = true, ValidateIssuerSigningKey = true,
-                ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],   // blocks "none" and HS256 key-confusion tricks
-                ValidTypes = [TokenService.AccessTokenType],           // an MFA-step token is not an access token
-                IssuerSigningKeyResolver = (_, _, kid, _) => keys.ValidationKeys.Where(k => k.KeyId == kid),
-                NameClaimType = "sub", RoleClaimType = "role"
-            };
+            jwt.TokenValidationParameters = ValidationFor(auth.Value, keys, auth.Value.Audience, TokenService.AccessTokenType);
         });
+
+    builder.Services.AddOptions<JwtBearerOptions>(TokenService.MfaChallengeScheme)
+        .Configure<ISigningKeyProvider, IOptions<AuthOptions>>((jwt, keys, auth) =>
+        {
+            jwt.MapInboundClaims = false;
+            jwt.SaveToken = false;
+            jwt.RequireHttpsMetadata = false;
+            jwt.TokenValidationParameters = ValidationFor(auth.Value, keys, TokenService.MfaAudience(auth.Value), TokenService.MfaTokenType);
+        });
+  
     builder.Services.AddAuthorization();
 
     builder.Services.AddRateLimiter(o =>

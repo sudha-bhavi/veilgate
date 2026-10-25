@@ -10,6 +10,7 @@ public sealed class TokenService(ISigningKeyProvider keys, IOptions<AuthOptions>
 {
     public const string AccessTokenType = "at+jwt";
     public const string MfaTokenType = "mfa+jwt";
+        public const string MfaChallengeScheme = "MfaChallenge";
     public static string MfaAudience(AuthOptions o) => o.Audience + "-mfa";
 
     private readonly JsonWebTokenHandler _handler = new();

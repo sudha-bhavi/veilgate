@@ -3,7 +3,7 @@ using FluentAssertions;
 using VeilGate.Infrastructure.Security;
 using Xunit;
 
-namespace VeilGate.Domain.Tests;
+namespace VeilGate.Api.Tests;
 
 public class AesGcmSecretProtectorTests
 {
@@ -35,7 +35,9 @@ public class AesGcmSecretProtectorTests
         var stored = NewProtector().Protect(Secret, "user-1");
 
         stored.Should().StartWith("v1:");
-        Convert.FromBase64String(stored[3..]).Should().NotContain(Secret);
+
+        var blob = Convert.FromBase64String(stored[3..]);
+        blob.AsSpan().IndexOf(Secret.AsSpan()).Should().Be(-1);   // the whole sequence must not appear
     }
 
     [Fact]
