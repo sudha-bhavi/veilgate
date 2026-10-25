@@ -19,6 +19,7 @@ public sealed class MfaApiTests : IDisposable
     private const string Password = "correct horse battery staple";
     private const string Start = "/api/v1/auth/mfa/totp/start";
     private const string Confirm = "/api/v1/auth/mfa/totp/confirm";
+        private const string Verify = "/api/v1/auth/mfa/verify";
 
     private readonly PostgresFixture _pg;
     private readonly AuthApiFactory _factory;
@@ -188,5 +189,93 @@ public sealed class MfaApiTests : IDisposable
 
         r.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await CodeOf(r)).Should().Be("validation.failed");
+    }
+        // ---------- sign in with the MFA code ----------
+
+    // Sets up MFA completely, then signs in again from scratch. Returns the key and a fresh temporary token.
+    private async Task<(User user, string key, string freshToken)> EnrolledUserAsync()
+    {
+        var user = await SeedUserAsync();
+        var token = await MfaTokenAsync(user);
+        var key = await StartAsync(token);
+        (await PostAsync(Confirm, token, new { code = CodeFor(key) })).StatusCode.Should().Be(HttpStatusCode.OK);
+        return (user, key, await MfaTokenAsync(user));   // a second, separate sign-in
+    }
+
+    [Fact]
+    public async Task Full_sign_in_returns_an_access_token_that_works()
+    {
+        var (user, key, token) = await EnrolledUserAsync();
+
+        // Login now says "enter your code" instead of "set up MFA".
+        var login = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email = user.Email, password = Password });
+        using (var doc = JsonDocument.Parse(await login.Content.ReadAsStringAsync()))
+        {
+            doc.RootElement.GetProperty("mfaRequired").GetBoolean().Should().BeTrue();
+            doc.RootElement.GetProperty("mfaEnrollmentRequired").GetBoolean().Should().BeFalse();
+        }
+
+        // The confirm step already used the current window, so use the next one (still inside the allowed drift).
+        var verify = await PostAsync(Verify, token, new { code = CodeFor(key, secondsFromNow: 30) });
+        verify.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var body = JsonDocument.Parse(await verify.Content.ReadAsStringAsync());
+        var access = body.RootElement.GetProperty("accessToken").GetString()!;
+        body.RootElement.GetProperty("tokenType").GetString().Should().Be("Bearer");
+
+        var me = new HttpRequestMessage(HttpMethod.Get, "/api/v1/me");
+        me.Headers.Authorization = new AuthenticationHeaderValue("Bearer", access);
+        var meResponse = await _client.SendAsync(me);
+
+        meResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var meBody = JsonDocument.Parse(await meResponse.Content.ReadAsStringAsync());
+        meBody.RootElement.GetProperty("tenantId").GetString().Should().Be(user.TenantId.ToString());
+        meBody.RootElement.GetProperty("userId").GetString().Should().Be(user.Id.ToString());
+    }
+
+    [Fact]
+    public async Task The_code_used_to_confirm_cannot_be_reused_to_sign_in()
+    {
+        var (_, key, token) = await EnrolledUserAsync();
+
+        var r = await PostAsync(Verify, token, new { code = CodeFor(key) });   // same window as the confirm step
+
+        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await CodeOf(r)).Should().Be("mfa.code_invalid");
+    }
+
+    [Fact]
+    public async Task A_wrong_code_does_not_sign_in()
+    {
+        var (_, key, token) = await EnrolledUserAsync();
+
+        var r = await PostAsync(Verify, token, new { code = CodeFor(key, secondsFromNow: -7200) });
+
+        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task An_access_token_cannot_be_used_at_the_verify_step()
+    {
+        var (user, key, _) = await EnrolledUserAsync();
+        var tokens = _factory.Services.GetRequiredService<ITokenService>();
+        var access = tokens.IssueAccessToken(new AccessTokenClaims(
+            user.Id, user.TenantId, user.Role.ToString(), Guid.NewGuid(), ["pwd", "otp"], DateTimeOffset.UtcNow, user.TokenVersion));
+
+        var r = await PostAsync(Verify, access, new { code = CodeFor(key, secondsFromNow: 30) });
+
+        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Verify_before_mfa_is_set_up_is_refused()
+    {
+        var user = await SeedUserAsync();
+        var token = await MfaTokenAsync(user);
+
+        var r = await PostAsync(Verify, token, new { code = "123456" });
+
+        r.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await CodeOf(r)).Should().Be("mfa.not_enrolled");
     }
 }
