@@ -42,7 +42,7 @@ public sealed class MfaController(
         var result = await confirm.HandleAsync(new ConfirmTotpCommand(userId, tenantId, request.Code), ct);
         if (result.IsFailure) return Fail(result.Error);
 
-        return Ok(new { mfaConfirmed = true });
+                return Ok(new { mfaConfirmed = true, recoveryCodes = result.Value.RecoveryCodes });
     }
 
     /// <summary>Sign-in step 2: the code from the authenticator app turns the temporary token into an access token.</summary>

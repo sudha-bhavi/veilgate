@@ -19,11 +19,12 @@ public class MfaEnrollmentHandlerTests
     private readonly IClock _clock = Substitute.For<IClock>();
     private readonly TenantContext _tenant = new();
     private readonly AesGcmSecretProtector _protector = new(RandomNumberGenerator.GetBytes(32));
+        private readonly IRecoveryCodeRepository _recovery = Substitute.For<IRecoveryCodeRepository>();
 
     public MfaEnrollmentHandlerTests() => _clock.UtcNow.Returns(Now);
 
     private StartTotpEnrollmentHandler Start() => new(_users, _factors, _tenant, _protector, _clock);
-    private ConfirmTotpHandler Confirm() => new(_users, _factors, _tenant, _protector, _clock, new ConfirmTotpValidator());
+    private ConfirmTotpHandler Confirm() => new(_users, _factors, _recovery, _tenant, _protector, _clock, new ConfirmTotpValidator());
 
     private User GivenActiveUser()
     {
@@ -168,5 +169,34 @@ public class MfaEnrollmentHandlerTests
         r.IsFailure.Should().BeTrue();
         r.Error.Code.Should().Be("validation.failed");
         await _users.DidNotReceive().GetCurrentTenantUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+        [Fact]
+    public async Task Confirm_creates_ten_recovery_codes_stores_only_hashes_and_returns_the_readable_ones()
+    {
+        var u = GivenActiveUser();
+        var (_, secret) = GivenFactor(u);
+        List<RecoveryCode>? saved = null;
+        _recovery.When(x => x.AddRange(Arg.Any<IEnumerable<RecoveryCode>>()))
+                 .Do(c => saved = c.Arg<IEnumerable<RecoveryCode>>().ToList());
+
+        var r = await Confirm().HandleAsync(new ConfirmTotpCommand(u.Id, u.TenantId, Totp.Compute(secret, Now.ToUnixTimeSeconds())));
+
+        r.IsSuccess.Should().BeTrue();
+        r.Value.RecoveryCodes.Should().HaveCount(10);
+        saved.Should().NotBeNull().And.HaveCount(10);
+        saved!.Select(s => s.CodeHash).Should().BeEquivalentTo(r.Value.RecoveryCodes.Select(RecoveryCodes.Hash));
+        saved.Select(s => s.CodeHash).Should().NotIntersectWith(r.Value.RecoveryCodes);   // hashes, never the readable codes
+    }
+
+    [Fact]
+    public async Task A_wrong_confirm_code_creates_no_recovery_codes()
+    {
+        var u = GivenActiveUser();
+        var (_, secret) = GivenFactor(u);
+
+        await Confirm().HandleAsync(new ConfirmTotpCommand(u.Id, u.TenantId, Totp.Compute(secret, Now.ToUnixTimeSeconds() - 3600)));
+
+        _recovery.DidNotReceive().AddRange(Arg.Any<IEnumerable<RecoveryCode>>());
     }
 }

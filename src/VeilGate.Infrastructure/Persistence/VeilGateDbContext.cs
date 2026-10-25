@@ -8,6 +8,7 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<User> Users => Set<User>();
         public DbSet<MfaFactor> MfaFactors => Set<MfaFactor>();
+            public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -77,6 +78,26 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
             // A user has at most one factor of each type.
             e.HasIndex(x => new { x.UserId, x.Type }).IsUnique().HasDatabaseName("ux_mfa_factors_user_type");
             e.ToTable(t => t.HasCheckConstraint("ck_mfa_factors_type", "type in ('Totp')"));
+        });
+    
+            b.Entity<RecoveryCode>(e =>
+        {
+            e.ToTable("recovery_codes");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.UserId).HasColumnName("user_id").IsRequired();
+            e.Property(x => x.CodeHash).HasColumnName("code_hash").HasMaxLength(64).IsRequired();
+            e.Property(x => x.UsedAt).HasColumnName("used_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Ignore(x => x.IsUsed);   // computed from UsedAt, not a column
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+
+            // The same code can't be stored twice for one user, and looking up by hash stays fast.
+            e.HasIndex(x => new { x.UserId, x.CodeHash }).IsUnique().HasDatabaseName("ux_recovery_codes_user_hash");
+            e.ToTable(t => t.HasCheckConstraint("ck_recovery_codes_hash", "length(code_hash) = 64"));
         });
     }
 }

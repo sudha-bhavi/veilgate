@@ -20,6 +20,7 @@ public class VerifyMfaHandlerTests
     private readonly IClock _clock = Substitute.For<IClock>();
     private readonly TenantContext _tenant = new();
     private readonly AesGcmSecretProtector _protector = new(RandomNumberGenerator.GetBytes(32));
+        private readonly IRecoveryCodeRepository _recovery = Substitute.For<IRecoveryCodeRepository>();
     private AccessTokenClaims? _issued;
 
     public VerifyMfaHandlerTests()
@@ -30,8 +31,8 @@ public class VerifyMfaHandlerTests
                .Returns("access-token");
     }
 
-    private VerifyMfaHandler Handler() =>
-        new(_users, _factors, _tenant, _protector, _tokens, _clock, new VerifyMfaValidator());
+      private VerifyMfaHandler Handler() =>
+        new(_users, _factors, _recovery, _tenant, _protector, _tokens, _clock, new VerifyMfaValidator());
 
     // An active user with a confirmed MFA factor, as it would sit in the database.
     private (User user, MfaFactor factor, byte[] secret) GivenEnrolledUser(bool confirmed = true)
@@ -152,5 +153,52 @@ public class VerifyMfaHandlerTests
 
         r.IsFailure.Should().BeTrue();
         r.Error.Code.Should().Be("validation.failed");
+    }
+
+        [Fact]
+    public async Task A_recovery_code_signs_in_once_and_is_marked_as_the_method()
+    {
+        var (user, _, _) = GivenEnrolledUser();
+        var raw = RecoveryCodes.Generate()[0];
+        var stored = RecoveryCode.Create(user.TenantId, user.Id, RecoveryCodes.Hash(raw), Now).Value;
+        _recovery.FindByHashAsync(user.Id, stored.CodeHash, Arg.Any<CancellationToken>()).Returns(stored);
+
+        // Typed lowercase and without the dash, the way people actually type it.
+        var typed = raw.Replace("-", "").ToLowerInvariant();
+        var r = await Handler().HandleAsync(Cmd(user, typed));
+
+        r.IsSuccess.Should().BeTrue();
+        stored.IsUsed.Should().BeTrue();
+        _issued!.Amr.Should().BeEquivalentTo(new[] { "pwd", "recovery" });
+    }
+
+    [Fact]
+    public async Task A_recovery_code_that_was_already_used_is_rejected_and_counted()
+    {
+        var (user, _, _) = GivenEnrolledUser();
+        var raw = RecoveryCodes.Generate()[0];
+        var stored = RecoveryCode.Create(user.TenantId, user.Id, RecoveryCodes.Hash(raw), Now).Value;
+        stored.MarkUsed(Now.AddDays(-1));
+        _recovery.FindByHashAsync(user.Id, stored.CodeHash, Arg.Any<CancellationToken>()).Returns(stored);
+
+        var r = await Handler().HandleAsync(Cmd(user, raw));
+
+        r.IsFailure.Should().BeTrue();
+        r.Error.Should().Be(ConfirmTotpHandler.InvalidCode);
+        user.FailedAttempts.Should().Be(1);
+        _issued.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task An_unknown_recovery_code_is_rejected_and_counted()
+    {
+        var (user, _, _) = GivenEnrolledUser();
+        _recovery.FindByHashAsync(user.Id, Arg.Any<string>(), Arg.Any<CancellationToken>())
+                 .Returns(Task.FromResult<RecoveryCode?>(null));
+
+        var r = await Handler().HandleAsync(Cmd(user, "ZZZZZ-ZZZZZ"));
+
+        r.IsFailure.Should().BeTrue();
+        user.FailedAttempts.Should().Be(1);
     }
 }

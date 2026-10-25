@@ -278,4 +278,48 @@ public sealed class MfaApiTests : IDisposable
         r.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await CodeOf(r)).Should().Be("mfa.not_enrolled");
     }
+        // Runs setup to the end and returns the readable recovery codes from the confirm response.
+    private async Task<(User user, List<string> codes)> EnrolledWithRecoveryCodesAsync()
+    {
+        var user = await SeedUserAsync();
+        var token = await MfaTokenAsync(user);
+        var key = await StartAsync(token);
+        var confirm = await PostAsync(Confirm, token, new { code = CodeFor(key) });
+        confirm.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var doc = JsonDocument.Parse(await confirm.Content.ReadAsStringAsync());
+        var codes = doc.RootElement.GetProperty("recoveryCodes").EnumerateArray().Select(e => e.GetString()!).ToList();
+        return (user, codes);
+    }
+
+    [Fact]
+    public async Task Confirm_returns_ten_recovery_codes_and_stores_only_their_hashes()
+    {
+        var (user, codes) = await EnrolledWithRecoveryCodesAsync();
+
+        codes.Should().HaveCount(10);
+        codes.Should().OnlyContain(c => System.Text.RegularExpressions.Regex.IsMatch(c, "^[A-Z2-9]{5}-[A-Z2-9]{5}$"));
+
+        await using var db = _pg.AdminContext();
+        var stored = await db.RecoveryCodes.Where(c => c.UserId == user.Id).Select(c => c.CodeHash).ToListAsync();
+        stored.Should().HaveCount(10);
+        stored.Should().NotIntersectWith(codes);   // the database holds hashes, never the readable codes
+    }
+
+    [Fact]
+    public async Task A_recovery_code_signs_in_exactly_once()
+    {
+        var (user, codes) = await EnrolledWithRecoveryCodesAsync();
+
+        var first = await PostAsync(Verify, await MfaTokenAsync(user), new { code = codes[0] });
+        first.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var again = await PostAsync(Verify, await MfaTokenAsync(user), new { code = codes[0] });
+        again.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await CodeOf(again)).Should().Be("mfa.code_invalid");
+
+        // A different code from the same set still works.
+        var other = await PostAsync(Verify, await MfaTokenAsync(user), new { code = codes[1] });
+        other.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
 }

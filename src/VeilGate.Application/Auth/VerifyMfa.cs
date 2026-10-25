@@ -6,6 +6,7 @@ using VeilGate.Domain.Common;
 namespace VeilGate.Application.Auth;
 
 /// <param name="TokenVersion">The "ver" claim from the temporary MFA token. Must still match the user's current version.</param>
+/// <param name="Code">Either the 6-digit code from the authenticator app, or a one-time recovery code.</param>
 public sealed record VerifyMfaCommand(Guid UserId, Guid TenantId, int TokenVersion, string Code);
 
 public sealed record VerifyMfaResult(string AccessToken);
@@ -14,15 +15,17 @@ public sealed class VerifyMfaValidator : AbstractValidator<VerifyMfaCommand>
 {
     public VerifyMfaValidator()
     {
-        RuleFor(x => x.Code).NotEmpty().MaximumLength(12);
+        RuleFor(x => x.Code).NotEmpty().MaximumLength(12);   // "XXXXX-XXXXX" is 11 characters
     }
 }
 
-/// <summary>Step 2 of sign-in: the MFA code turns the temporary token into a real access token.</summary>
+/// <summary>Step 2 of sign-in: an MFA code (or a recovery code) turns the temporary token into a real access token.</summary>
 public sealed class VerifyMfaHandler(
-    IUserRepository users, IMfaFactorRepository factors, ITenantContext tenant,
-    ISecretProtector protector, ITokenService tokens, IClock clock, IValidator<VerifyMfaCommand> validator)
+    IUserRepository users, IMfaFactorRepository factors, IRecoveryCodeRepository recoveryCodeStore,
+    ITenantContext tenant, ISecretProtector protector, ITokenService tokens, IClock clock,
+    IValidator<VerifyMfaCommand> validator)
 {
+    private const int RecoveryCodeLength = 10;   // letters and digits, not counting the dash
     private static readonly Error InvalidToken = Error.Unauthorized("auth.token_invalid", "Sign in again.");
 
     public async Task<Result<VerifyMfaResult>> HandleAsync(VerifyMfaCommand cmd, CancellationToken ct = default)
@@ -45,19 +48,28 @@ public sealed class VerifyMfaHandler(
         if (factor is not { IsConfirmed: true })
             return Error.Forbidden("mfa.not_enrolled", "Set up MFA first.");
 
-        var secret = protector.Unprotect(factor.ProtectedSecret, StartTotpEnrollmentHandler.ProtectionContext(user.Id));
-        var window = Totp.Verify(secret, cmd.Code, now.ToUnixTimeSeconds(), factor.LastUsedCounter);
-
-        if (window is null)
+        string[] methods;
+        if (RecoveryCodes.Normalize(cmd.Code).Length == RecoveryCodeLength)
         {
-            // A wrong code counts like a wrong password: 5 in a row lock the account for 15 minutes.
-            user.RegisterFailedLogin(now);
-            await users.SaveChangesAsync(ct);
-            return ConfirmTotpHandler.InvalidCode;
-        }
+            // A backup code. Look it up by its hash; it must exist and must not have been used before.
+            var stored = await recoveryCodeStore.FindByHashAsync(user.Id, RecoveryCodes.Hash(cmd.Code), ct);
+            if (stored is null || stored.MarkUsed(now).IsFailure)
+                return await RejectAsync(user, now, ct);
 
-        var used = factor.RecordUse(window.Value, now);   // remember the window so this code can't be replayed
-        if (used.IsFailure) return used.Error;
+            methods = ["pwd", "recovery"];
+        }
+        else
+        {
+            // A 6-digit code from the authenticator app.
+            var secret = protector.Unprotect(factor.ProtectedSecret, StartTotpEnrollmentHandler.ProtectionContext(user.Id));
+            var window = Totp.Verify(secret, cmd.Code, now.ToUnixTimeSeconds(), factor.LastUsedCounter);
+            if (window is null) return await RejectAsync(user, now, ct);
+
+            var used = factor.RecordUse(window.Value, now);   // remember the window so this code can't be replayed
+            if (used.IsFailure) return used.Error;
+
+            methods = ["pwd", "otp"];
+        }
 
         user.RegisterSuccessfulLogin(now);
         await factors.SaveChangesAsync(ct);
@@ -65,10 +77,18 @@ public sealed class VerifyMfaHandler(
         var accessToken = tokens.IssueAccessToken(new AccessTokenClaims(
             user.Id, user.TenantId, user.Role.ToString(),
             SessionId: Guid.CreateVersion7(),   // real sessions arrive with refresh tokens
-            Amr: ["pwd", "otp"],
+            Amr: methods,
             AuthTime: now,
             TokenVersion: user.TokenVersion), now);
 
         return new VerifyMfaResult(accessToken);
+    }
+
+    // A wrong code counts like a wrong password: 5 in a row lock the account for 15 minutes.
+    private async Task<Result<VerifyMfaResult>> RejectAsync(User user, DateTimeOffset now, CancellationToken ct)
+    {
+        user.RegisterFailedLogin(now);
+        await users.SaveChangesAsync(ct);
+        return ConfirmTotpHandler.InvalidCode;
     }
 }
