@@ -18,6 +18,8 @@ public class LoginHandlerTests
     private readonly IClock _clock = Substitute.For<IClock>();
     private readonly TenantContext _tenant = new();
 
+        private readonly IMfaFactorRepository _factors = Substitute.For<IMfaFactorRepository>();
+
     public LoginHandlerTests()
     {
         _clock.UtcNow.Returns(Now);
@@ -25,7 +27,7 @@ public class LoginHandlerTests
         _users.IsTenantActiveAsync(Arg.Any<CancellationToken>()).Returns(true);
     }
 
-    private LoginHandler Handler() => new(_users, _hasher, _tenant, _tokens, _clock, new LoginValidator());
+     private LoginHandler Handler() => new(_users, _factors, _hasher, _tenant, _tokens, _clock, new LoginValidator());
 
     private User GivenActiveUser()
     {
@@ -125,5 +127,49 @@ public class LoginHandlerTests
 
         r.Error.Kind.Should().Be(ErrorKind.Validation);
         await _users.DidNotReceive().FindLoginCandidateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task User_without_mfa_is_told_to_enroll()
+    {
+        var u = GivenActiveUser();
+        _hasher.Verify("pw", "stored-hash").Returns(true);
+        _factors.GetTotpForUserAsync(u.Id, Arg.Any<CancellationToken>()).Returns(Task.FromResult<MfaFactor?>(null));
+
+        var r = await Handler().HandleAsync(new LoginCommand("jordan@acme.test", "pw"));
+
+        r.IsSuccess.Should().BeTrue();
+        r.Value.MfaRequired.Should().BeFalse();
+        r.Value.MfaEnrollmentRequired.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task User_with_a_confirmed_factor_is_asked_for_a_code()
+    {
+        var u = GivenActiveUser();
+        _hasher.Verify("pw", "stored-hash").Returns(true);
+        var factor = MfaFactor.EnrollTotp(u.TenantId, u.Id, "v1:x", Now).Value;
+        factor.Confirm(1, Now);
+        _factors.GetTotpForUserAsync(u.Id, Arg.Any<CancellationToken>()).Returns(factor);
+
+        var r = await Handler().HandleAsync(new LoginCommand("jordan@acme.test", "pw"));
+
+        r.IsSuccess.Should().BeTrue();
+        r.Value.MfaRequired.Should().BeTrue();
+        r.Value.MfaEnrollmentRequired.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task An_unconfirmed_factor_still_means_enroll()
+    {
+        var u = GivenActiveUser();
+        _hasher.Verify("pw", "stored-hash").Returns(true);
+        var factor = MfaFactor.EnrollTotp(u.TenantId, u.Id, "v1:x", Now).Value;   // never confirmed
+        _factors.GetTotpForUserAsync(u.Id, Arg.Any<CancellationToken>()).Returns(factor);
+
+        var r = await Handler().HandleAsync(new LoginCommand("jordan@acme.test", "pw"));
+
+        r.Value.MfaRequired.Should().BeFalse();
+        r.Value.MfaEnrollmentRequired.Should().BeTrue();
     }
 }

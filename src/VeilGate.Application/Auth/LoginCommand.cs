@@ -24,7 +24,7 @@ public sealed class LoginValidator : AbstractValidator<LoginCommand>
 /// Every failure that could reveal whether an account exists returns the same error, and takes about the same time.
 /// </summary>
 public sealed class LoginHandler(
-    IUserRepository users, IPasswordHasher hasher, ITenantContext tenant,
+    IUserRepository users, IMfaFactorRepository factors, IPasswordHasher hasher, ITenantContext tenant,
     ITokenService tokens, IClock clock, IValidator<LoginCommand> validator)
 {
     public static readonly Error InvalidCredentials = Error.Unauthorized("auth.invalid_credentials", "Email or password is incorrect");
@@ -65,8 +65,11 @@ public sealed class LoginHandler(
         user.RegisterSuccessfulLogin(now);
         await users.SaveChangesAsync(ct);
 
-        // M1c adds the MFA tables. Until then every user is asked to enroll.
+                // Has this user finished setting up MFA? If so they enter a code; if not they must set it up first.
+        var factor = await factors.GetTotpForUserAsync(user.Id, ct);
+        var hasConfirmedMfa = factor is { IsConfirmed: true };
+
         var mfaToken = tokens.IssueMfaChallengeToken(user.Id, user.TenantId, user.TokenVersion, now);
-        return new LoginResult(MfaRequired: false, MfaEnrollmentRequired: true, MfaToken: mfaToken);
+        return new LoginResult(MfaRequired: hasConfirmedMfa, MfaEnrollmentRequired: !hasConfirmedMfa, MfaToken: mfaToken);
     }
 }
