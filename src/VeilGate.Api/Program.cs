@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -104,11 +105,20 @@ try
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
 
-    builder.Services.AddControllers().AddJsonOptions(o =>
-    {
-        o.JsonSerializerOptions.UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow; // mass-assignment defense
-        o.JsonSerializerOptions.MaxDepth = 32;
-    });
+    builder.Services.AddControllers(o => o.Filters.Add<VeilGate.Api.Filters.ValidationFilter>())
+        .AddJsonOptions(o =>
+        {
+            o.JsonSerializerOptions.UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow; // mass-assignment defense
+            o.JsonSerializerOptions.MaxDepth = 32;
+        })
+        .ConfigureApiBehaviorOptions(o => o.InvalidModelStateResponseFactory = _ =>
+        {
+            // Broken JSON, an unknown property, a wrong type: 400 with a stable code. The details are not echoed back, since they could contain request data.
+            var problem = new ProblemDetails { Status = 400, Title = "The request body is malformed." };
+            problem.Extensions["code"] = "request.malformed";
+            return new ObjectResult(problem) { StatusCode = 400, ContentTypes = { "application/problem+json" } };
+        });
+    builder.Services.AddValidatorsFromAssemblyContaining<VeilGate.Api.Filters.ValidationFilter>();
     builder.Services.AddProblemDetails();
     builder.Services.AddHealthChecks()
         .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"]);

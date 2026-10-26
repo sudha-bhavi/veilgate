@@ -13,6 +13,14 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
     {
         try { await next(ctx); }
         catch (OperationCanceledException) when (ctx.RequestAborted.IsCancellationRequested) { ctx.Response.StatusCode = 499; }
+        catch (BadHttpRequestException ex) when (ex.StatusCode == StatusCodes.Status413PayloadTooLarge && !ctx.Response.HasStarted)
+        {
+            ctx.Response.Clear();
+            ctx.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+            var problem = new ProblemDetails { Status = 413, Title = "The request body is too large." };
+            problem.Extensions["code"] = "payload.too_large";
+            await ctx.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json");
+        }
         catch (Exception ex)
         {
             log.LogError(ex, "Unhandled exception for {Method} {Path}", ctx.Request.Method, ctx.Request.Path.Value);
