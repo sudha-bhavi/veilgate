@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using VeilGate.Domain;
+using VeilGate.Domain.Vault;
 
 namespace VeilGate.Infrastructure.Persistence;
 
@@ -10,6 +11,9 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
         public DbSet<MfaFactor> MfaFactors => Set<MfaFactor>();
     public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
         public DbSet<Session> Sessions => Set<Session>();
+    public DbSet<VaultSession> VaultSessions => Set<VaultSession>();
+    public DbSet<VaultToken> VaultTokens => Set<VaultToken>();
+    public DbSet<TenantKey> TenantKeys => Set<TenantKey>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -129,6 +133,74 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
                 t.HasCheckConstraint("ck_sessions_current_hash", "length(current_refresh_hash) = 64");
                 t.HasCheckConstraint("ck_sessions_expiry", "expires_at > created_at");
             });
+        });
+
+        b.Entity<VaultSession>(e =>
+        {
+            e.ToTable("vault_sessions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.ClientId).HasColumnName("client_id").IsRequired();   // no FK yet: api_clients arrives in M4
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+
+            // These live only in memory for the duration of one request. They are never saved.
+            e.Ignore(x => x.DateShiftKey);
+            e.Ignore(x => x.SubjectId);
+            e.Ignore(x => x.DateShiftSeed);
+            e.Ignore(x => x.Tokens);
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            // Lets vault_tokens point at (tenant_id, id), so a token can never reference another tenant's session.
+            e.HasAlternateKey(x => new { x.TenantId, x.Id });
+            e.HasIndex(x => x.ExpiresAt).HasDatabaseName("ix_vault_sessions_expires");
+            e.ToTable(t => t.HasCheckConstraint("ck_vault_sessions_ttl", "expires_at <= created_at + interval '24 hours'"));
+        });
+
+        b.Entity<VaultToken>(e =>
+        {
+            e.ToTable("vault_tokens");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.SessionId).HasColumnName("session_id").IsRequired();
+            e.Property(x => x.Token).HasColumnName("token").HasMaxLength(40).IsRequired();
+            e.Property(x => x.EntityType).HasColumnName("entity_type").HasMaxLength(40).IsRequired();
+            e.Property(x => x.Ciphertext).HasColumnName("ciphertext").IsRequired();
+            e.Property(x => x.Nonce).HasColumnName("nonce").IsRequired();
+            e.Property(x => x.Tag).HasColumnName("tag").IsRequired();
+            e.Property(x => x.DekVersion).HasColumnName("dek_version");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            // The one cascade in the whole schema: vault data is temporary by design (Database doc 3.3).
+            e.HasOne<VaultSession>().WithMany()
+                .HasForeignKey(x => new { x.TenantId, x.SessionId })
+                .HasPrincipalKey(s => new { s.TenantId, s.Id })
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => new { x.SessionId, x.Token }).IsUnique().HasDatabaseName("ux_vault_tokens_session_token");
+            // Reusing a nonce under the same key breaks AES-GCM. The database refuses it.
+            e.HasIndex(x => new { x.TenantId, x.DekVersion, x.Nonce }).IsUnique().HasDatabaseName("ux_vault_tokens_nonce");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_vault_tokens_nonce", "length(nonce) = 12");
+                t.HasCheckConstraint("ck_vault_tokens_tag", "length(tag) = 16");
+            });
+        });
+
+        b.Entity<TenantKey>(e =>
+        {
+            e.ToTable("tenant_keys");
+            e.HasKey(x => new { x.TenantId, x.DekVersion });
+            e.Property(x => x.TenantId).HasColumnName("tenant_id");
+            e.Property(x => x.DekVersion).HasColumnName("dek_version");
+            e.Property(x => x.WrappedDek).HasColumnName("wrapped_dek").IsRequired();
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(10).IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.ToTable(t => t.HasCheckConstraint("ck_tenant_keys_status", "status in ('Active','Retired')"));
         });
     }
 }

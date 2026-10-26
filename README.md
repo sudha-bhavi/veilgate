@@ -12,8 +12,8 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 | --------- | ------------------------------------------------------------------------------- | ------- |
 | M0        | Solution skeleton, Docker Compose, Postgres roles, health endpoint, first tests | ✅ Done |
 | M1        | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh             | ✅ Done |
-| M2        | Detection engine, policy engine, tokenizer + vault                              | next    |
-| M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                    |         |
+| M2        | Detection engine, policy engine, tokenizer + vault                              | ✅ Done |
+| M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                    | next    |
 | M4        | Policy workflow, API clients, evaluations                                       |         |
 | M5        | React console                                                                   |         |
 | M6        | Kafka outbox, workers, dashboards                                               |         |
@@ -103,3 +103,17 @@ curl -s -X POST http://localhost:5000/api/v1/auth/login -H 'Content-Type: applic
 
 In Development the API creates a temporary signing key at startup. In any other environment you must set `Auth__Keys__0__Kid` and `Auth__Keys__0__PrivateKeyPem`
 (generate with `openssl ecparam -name prime256v1 -genkey -noout`).
+
+## M2: detection, policy, transformation, vault
+
+Pure logic first, then the encrypted vault. No HTTP endpoints yet (those are M3).
+
+```
+text -> TextNormalizer -> DetectionPipeline (RegexDetector, DictionaryDetector) -> PolicyEngine (PolicyParser reads the YAML)
+     -> Transformer (MASK / REDACT / TOKENIZE / SHIFT) -> OutboundLeakGate -> [LLM] -> Rehydrator (tokens back to originals)
+```
+
+- Vault: values are encrypted with AES-256-GCM under a per-tenant data key; the data key is stored wrapped by a master key.
+- New migration `AddVault` (tables `tenant_keys`, `vault_sessions`, `vault_tokens`, all with row-level security). Apply it with `dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api`.
+- New setting `Security:VaultKek` (32 random bytes, base64). `appsettings.Development.json` has a development-only value. In any other environment set it yourself: `openssl rand -base64 32` (production will use Key Vault).
+- Token format is `[[TYPE_XXXX]]` (underscore), as in Backend doc 6.2 and Database doc 3.4.

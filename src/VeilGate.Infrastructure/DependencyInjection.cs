@@ -28,6 +28,15 @@ public static class DependencyInjection
             return new AesGcmSecretProtector(Convert.FromBase64String(base64));
         });
         services.AddSingleton<IPasswordHasher, Argon2PasswordHasher>();
+        // The master key is read when a vault is first needed, so the API still starts (and other tests run) without it.
+        services.AddScoped<IKeyProvider>(sp =>
+        {
+            var base64 = sp.GetRequiredService<IConfiguration>()["Security:VaultKek"];
+            if (string.IsNullOrWhiteSpace(base64))
+                throw new InvalidOperationException("Security:VaultKek is required (32 random bytes, base64-encoded).");
+            return new LocalKeyProvider(sp.GetRequiredService<VeilGateDbContext>(), sp.GetRequiredService<IClock>(), Convert.FromBase64String(base64));
+        });
+        services.AddScoped<IVaultService, AesGcmVaultService>();
         // The connection string is read when the first DbContext is built, so configuration overrides (tests, environment variables) always apply.
         services.AddDbContext<VeilGateDbContext>((sp, o) =>
         {

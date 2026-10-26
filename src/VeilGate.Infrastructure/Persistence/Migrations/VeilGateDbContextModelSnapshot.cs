@@ -317,6 +317,140 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("VeilGate.Domain.Vault.TenantKey", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("DekVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("dek_version");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("status");
+
+                    b.Property<byte[]>("WrappedDek")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("wrapped_dek");
+
+                    b.HasKey("TenantId", "DekVersion");
+
+                    b.ToTable("tenant_keys", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tenant_keys_status", "status in ('Active','Retired')");
+                        });
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Vault.VaultSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_vault_sessions_expires");
+
+                    b.ToTable("vault_sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_vault_sessions_ttl", "expires_at <= created_at + interval '24 hours'");
+                        });
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Vault.VaultToken", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<byte[]>("Ciphertext")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("ciphertext");
+
+                    b.Property<int>("DekVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("dek_version");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<byte[]>("Nonce")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("nonce");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.Property<byte[]>("Tag")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("tag");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("token");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId", "Token")
+                        .IsUnique()
+                        .HasDatabaseName("ux_vault_tokens_session_token");
+
+                    b.HasIndex("TenantId", "SessionId");
+
+                    b.HasIndex("TenantId", "DekVersion", "Nonce")
+                        .IsUnique()
+                        .HasDatabaseName("ux_vault_tokens_nonce");
+
+                    b.ToTable("vault_tokens", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_vault_tokens_nonce", "length(nonce) = 12");
+
+                            t.HasCheckConstraint("ck_vault_tokens_tag", "length(tag) = 16");
+                        });
+                });
+
             modelBuilder.Entity("VeilGate.Domain.MfaFactor", b =>
                 {
                     b.HasOne("VeilGate.Domain.Tenant", null)
@@ -368,6 +502,40 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Vault.TenantKey", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Vault.VaultSession", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Vault.VaultToken", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VeilGate.Domain.Vault.VaultSession", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SessionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 #pragma warning restore 612, 618
