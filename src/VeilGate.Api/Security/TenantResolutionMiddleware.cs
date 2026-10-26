@@ -12,7 +12,19 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(HttpContext ctx, ITenantContext tenant)
     {
-        if (ctx.User.Identity?.IsAuthenticated == true)
+        if (ctx.User.Identity?.IsAuthenticated == true && AuthPolicies.IsClientToken(ctx.User))
+        {
+            // An API client's token: the tenant comes from the signed tid claim as always. There is no user to look up.
+            // (In M4, when API clients are stored, this is also where a revoked or disabled client is rejected.)
+            if (!Guid.TryParse(ctx.User.FindFirst("tid")?.Value, out var clientTenant) || clientTenant == Guid.Empty
+                || !Guid.TryParse(ctx.User.FindFirst("client_id")?.Value, out _))
+            {
+                await Reject(ctx);
+                return;
+            }
+            tenant.Set(clientTenant);
+        }
+        else if (ctx.User.Identity?.IsAuthenticated == true)
         {
             var ok = Guid.TryParse(ctx.User.FindFirst("tid")?.Value, out var tenantId)
                      & Guid.TryParse(ctx.User.FindFirst("sub")?.Value, out var userId)

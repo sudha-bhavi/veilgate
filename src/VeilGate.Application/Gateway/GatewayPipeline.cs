@@ -242,7 +242,7 @@ public sealed class GatewayPipeline(
     private async Task AuditAsync(GatewayCaller caller, string action, string requestId, string result, Dictionary<string, string> details, CancellationToken ct)
     {
         details["requestId"] = requestId;
-        var created = AuditEvent.Create(caller.TenantId, clock.UtcNow, "client", caller.ClientId, action, "gateway_request", null, result, caller.Ip, details);
+        var created = AuditEvent.Create(caller.TenantId, clock.UtcNow, caller.ActorType, caller.ClientId, action, "gateway_request", null, result, caller.Ip, details);
         if (created.IsFailure)
         {
             logger.LogError("Could not build audit event {Action}: {Code}", action, created.Error.Code);
@@ -257,7 +257,9 @@ public sealed class GatewayPipeline(
     private async Task RecordSecurityEventAsync(GatewayCaller caller, Severity severity, string type, string requestId, IReadOnlyList<string> types, CancellationToken ct)
     {
         var joined = string.Join(",", types);
-        var created = SecurityEvent.Create(caller.TenantId, clock.UtcNow, severity, type, clientId: caller.ClientId, ip: caller.Ip,
+        var isUser = caller.ActorType == "user";
+        var created = SecurityEvent.Create(caller.TenantId, clock.UtcNow, severity, type,
+            userId: isUser ? caller.ClientId : null, clientId: isUser ? null : caller.ClientId, ip: caller.Ip,
             details: new Dictionary<string, string> { ["requestId"] = requestId, ["types"] = joined.Length > 200 ? joined[..200] : joined });
         if (created.IsSuccess) await securityEvents.WriteAsync(created.Value, ct);
     }

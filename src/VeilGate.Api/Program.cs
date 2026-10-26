@@ -67,7 +67,7 @@ try
             jwt.TokenValidationParameters = ValidationFor(auth.Value, keys, TokenService.MfaAudience(auth.Value), TokenService.MfaTokenType);
         });
   
-    builder.Services.AddAuthorization();
+    builder.Services.AddAuthorization(o => o.AddVeilGatePolicies());
 
     builder.Services.AddRateLimiter(o =>
     {
@@ -86,6 +86,16 @@ try
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = http.RequestServices.GetRequiredService<IOptions<AuthOptions>>().Value.LoginRateLimitPerMinute,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+        // The gateway is limited per caller, not per IP: one busy client behind a shared proxy must not starve the others.
+        // The limiter runs after authentication (see below) so the token's client id is known here.
+        o.AddPolicy("gateway", http => RateLimitPartition.GetFixedWindowLimiter(
+            http.User.FindFirst("client_id")?.Value ?? http.User.FindFirst("sub")?.Value ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = http.RequestServices.GetRequiredService<IOptions<GatewayOptions>>().Value.RateLimitPerClientPerMinute,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
@@ -118,8 +128,8 @@ try
     app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseSerilogRequestLogging(o => o.GetLevel = (_, _, ex) => ex is null ? Serilog.Events.LogEventLevel.Information : Serilog.Events.LogEventLevel.Error);
     app.UseCors();
-    app.UseRateLimiter();
     app.UseAuthentication();                       // 1. who is calling? (verifies the token signature, issuer, audience, expiry)
+    app.UseRateLimiter();                          //    after authentication, so limits can be per client; login limits are still per IP
     app.UseMiddleware<TenantResolutionMiddleware>(); // 2. which tenant? only from the signed token, then check the token is still valid
     app.UseAuthorization();                        // 3. may they do this? (controllers require a token unless [AllowAnonymous])
 

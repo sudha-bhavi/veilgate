@@ -9,4 +9,5 @@ public sealed class GatewayOptions
     [Range(1024, 20_971_520)] public int MaxFhirBytes { get; set; } = 5_242_880;
     [Range(1, 1440)] public int VaultTtlMinutesDefault { get; set; } = 60;
     [Range(1, 1440)] public int VaultTtlMinutesMax { get; set; } = 1440;
+    [Range(1, 100_000)] public int RateLimitPerClientPerMinute { get; set; } = 600;   // Backend doc 7.1: GatewayPerClientPerMinute
 }

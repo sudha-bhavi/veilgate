@@ -6,7 +6,7 @@ using VeilGate.Domain.Policies;
 namespace VeilGate.Application.Gateway;
 
 /// <summary>Who is calling, taken from the validated token and never from the request body. CanReidentify = the token has the gateway:reidentify scope.</summary>
-public sealed record GatewayCaller(Guid TenantId, Guid ClientId, bool CanReidentify, string? Ip = null);
+public sealed record GatewayCaller(Guid TenantId, Guid ClientId, bool CanReidentify, string? Ip = null, string ActorType = "client");
 
 /// <summary>One protected value: where it was in the input, what was done, and the token if it was tokenized. Never the value itself.</summary>
 public sealed record ProtectedEntity(string Type, int Start, int End, PolicyAction Action, string? Token);
