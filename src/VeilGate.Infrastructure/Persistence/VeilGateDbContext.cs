@@ -19,6 +19,7 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<VaultToken> VaultTokens => Set<VaultToken>();
     public DbSet<TenantKey> TenantKeys => Set<TenantKey>();
         public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -221,16 +222,9 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
             e.Property(x => x.ResourceType).HasColumnName("resource_type").HasMaxLength(40);
             e.Property(x => x.ResourceId).HasColumnName("resource_id");
             e.Property(x => x.Result).HasColumnName("result").HasMaxLength(10).IsRequired();
-            e.Property(x => x.Ip).HasColumnName("ip").HasColumnType("inet")
-                .HasConversion(v => IPAddress.Parse(v), v => v.ToString());   // text in our code, inet in the database
+            e.Property(x => x.Ip).HasColumnName("ip").HasColumnType("inet").HasConversion(PostgresConverters.Ip);
             e.Property(x => x.Details).HasColumnName("details").HasColumnType("jsonb").IsRequired()
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, string>(),
-                    new ValueComparer<IReadOnlyDictionary<string, string>>(
-                        (x, y) => x!.Count == y!.Count && !x.Except(y).Any(),
-                        v => v.Aggregate(0, (h, kv) => HashCode.Combine(h, kv.Key, kv.Value)),
-                        v => new Dictionary<string, string>(v)));
+                .HasConversion(PostgresConverters.Details, PostgresConverters.DetailsComparer);
             e.Property(x => x.PrevHash).HasColumnName("prev_hash").HasMaxLength(64).IsFixedLength().IsRequired();
             e.Property(x => x.Hash).HasColumnName("hash").HasMaxLength(64).IsFixedLength().IsRequired();
 
@@ -248,6 +242,31 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
                 t.HasCheckConstraint("ck_audit_events_actor", "actor_type in ('user','client','system')");
                 t.HasCheckConstraint("ck_audit_events_result", "result in ('success','failure','denied')");
             });
+        });
+
+        b.Entity<SecurityEvent>(e =>
+        {
+            e.ToTable("security_events");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            e.Property(x => x.Severity).HasColumnName("severity").HasConversion<string>().HasMaxLength(10).IsRequired();
+            e.Property(x => x.Type).HasColumnName("type").HasMaxLength(60).IsRequired();
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.ClientId).HasColumnName("client_id");   // no FK yet: api_clients arrives in M4
+            e.Property(x => x.Ip).HasColumnName("ip").HasColumnType("inet").HasConversion(PostgresConverters.Ip);
+            e.Property(x => x.Details).HasColumnName("details").HasColumnType("jsonb").IsRequired()
+                .HasConversion(PostgresConverters.Details, PostgresConverters.DetailsComparer);
+            e.Property(x => x.AcknowledgedBy).HasColumnName("acknowledged_by");
+            e.Property(x => x.AcknowledgedAt).HasColumnName("acknowledged_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+
+            // The security center feed: newest first, filtered by severity.
+            e.HasIndex(x => new { x.TenantId, x.Severity, x.OccurredAt }).IsDescending(false, false, true).HasDatabaseName("ix_security_events_feed");
+            e.ToTable(t => t.HasCheckConstraint("ck_security_events_severity", "severity in ('Info','Low','Medium','High','Critical')"));
         });
     }
 }
