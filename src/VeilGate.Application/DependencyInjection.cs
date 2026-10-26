@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<Detection.IDetectionPipeline, Detection.DetectionPipeline>();
         services.AddScoped<Policies.IPolicyEngine, Policies.PolicyEngine>();
         services.AddSingleton<Transformation.ITransformer, Transformation.Transformer>();
+        services.AddScoped<Transformation.IOutboundLeakGate, Transformation.OutboundLeakGate>();
         return services;
     }
 }
