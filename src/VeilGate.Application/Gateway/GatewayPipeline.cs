@@ -169,7 +169,7 @@ public sealed class GatewayPipeline(
         await AuditAsync(caller, "gateway.chat", requestId, "success", details, ct);
 
         var counts = protectedTypes.GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count());
-        return new ChatOutput(requestId, answer.Value, content, restored, resolved.Value.Version, counts);
+        return new ChatOutput(requestId, answer.Value, content, restored, resolved.Value.Version, counts, sanitized, scanned.Value);
     }
 
     // --------------------------------------------------------- shared steps

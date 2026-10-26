@@ -143,9 +143,14 @@ try
     app.UseMiddleware<TenantResolutionMiddleware>(); // 2. which tenant? only from the signed token, then check the token is still valid
     app.UseAuthorization();                        // 3. may they do this? (controllers require a token unless [AllowAnonymous])
 
-    // Secure by default: every controller endpoint needs a valid token unless it is explicitly marked [AllowAnonymous].
-    // Unknown URLs still get a plain 404, so the API does not behave differently for signed-out callers.
-    app.MapControllers().RequireAuthorization();
+    // Secure by default: an endpoint with no [Authorize] or [AllowAnonymous] of its own gets a plain [Authorize] (a signed-in person).
+    // This is a convention rather than RequireAuthorization() because that would be stacked on top of the gateway's own policies,
+    // and a client token could then never pass. Unknown URLs still get a plain 404, so signed-out callers learn nothing.
+    app.MapControllers().Add(endpoint =>
+    {
+        if (!endpoint.Metadata.Any(m => m is Microsoft.AspNetCore.Authorization.IAuthorizeData or Microsoft.AspNetCore.Authorization.IAllowAnonymous))
+            endpoint.Metadata.Add(new Microsoft.AspNetCore.Authorization.AuthorizeAttribute());
+    });
     app.MapHealthChecks("/health/live", new() { Predicate = r => r.Tags.Contains("live") }).AllowAnonymous();
 
     app.Run();

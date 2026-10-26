@@ -19,8 +19,13 @@ public sealed record ReidentifyOutput(string Text, int Replaced, IReadOnlyList<s
 
 public sealed record ChatInput(string Model, IReadOnlyList<LlmMessage> Messages, double? Temperature = null, int? MaxTokens = null);
 
+/// <summary>
+/// Content is what the caller gets (originals restored when allowed). SanitizedMessages and MaskedAnswer are what actually crossed
+/// the boundary to and from the model; the playground shows them so a developer can see the protection working.
+/// </summary>
 public sealed record ChatOutput(
-    string RequestId, LlmResponse Response, string Content, bool Restored, int PolicyVersion, IReadOnlyDictionary<string, int> EntitiesProtected);
+    string RequestId, LlmResponse Response, string Content, bool Restored, int PolicyVersion, IReadOnlyDictionary<string, int> EntitiesProtected,
+    IReadOnlyList<LlmMessage> SanitizedMessages, string MaskedAnswer);
 
 /// <summary>
 /// The four things the gateway does (Backend doc 4.1). Every operation is fail-closed: nothing reaches a language model unless
