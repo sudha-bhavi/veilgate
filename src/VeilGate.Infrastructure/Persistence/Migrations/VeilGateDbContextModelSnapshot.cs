@@ -126,6 +126,74 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("VeilGate.Domain.Session", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CurrentRefreshHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("current_refresh_hash");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<string>("PreviousRefreshHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("previous_refresh_hash");
+
+                    b.Property<string>("RevokeReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("revoke_reason");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CurrentRefreshHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sessions_current_hash");
+
+                    b.HasIndex("PreviousRefreshHash")
+                        .HasDatabaseName("ix_sessions_previous_hash");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_sessions_user");
+
+                    b.ToTable("sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sessions_current_hash", "length(current_refresh_hash) = 64");
+
+                            t.HasCheckConstraint("ck_sessions_expiry", "expires_at > created_at");
+                        });
+                });
+
             modelBuilder.Entity("VeilGate.Domain.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -265,6 +333,21 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("VeilGate.Domain.RecoveryCode", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VeilGate.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Session", b =>
                 {
                     b.HasOne("VeilGate.Domain.Tenant", null)
                         .WithMany()

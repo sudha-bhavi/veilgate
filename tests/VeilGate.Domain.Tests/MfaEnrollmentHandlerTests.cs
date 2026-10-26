@@ -176,16 +176,16 @@ public class MfaEnrollmentHandlerTests
     {
         var u = GivenActiveUser();
         var (_, secret) = GivenFactor(u);
-        List<RecoveryCode>? saved = null;
+        var saved = new List<RecoveryCode>();
         _recovery.When(x => x.AddRange(Arg.Any<IEnumerable<RecoveryCode>>()))
-                 .Do(c => saved = c.Arg<IEnumerable<RecoveryCode>>().ToList());
+                 .Do(c => saved.AddRange(c.Arg<IEnumerable<RecoveryCode>>()));
 
         var r = await Confirm().HandleAsync(new ConfirmTotpCommand(u.Id, u.TenantId, Totp.Compute(secret, Now.ToUnixTimeSeconds())));
 
         r.IsSuccess.Should().BeTrue();
         r.Value.RecoveryCodes.Should().HaveCount(10);
-        saved.Should().NotBeNull().And.HaveCount(10);
-        saved!.Select(s => s.CodeHash).Should().BeEquivalentTo(r.Value.RecoveryCodes.Select(RecoveryCodes.Hash));
+        saved.Should().HaveCount(10);
+        saved.Select(s => s.CodeHash).Should().BeEquivalentTo(r.Value.RecoveryCodes.Select(RecoveryCodes.Hash));
         saved.Select(s => s.CodeHash).Should().NotIntersectWith(r.Value.RecoveryCodes);   // hashes, never the readable codes
     }
 

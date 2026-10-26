@@ -8,7 +8,8 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<User> Users => Set<User>();
         public DbSet<MfaFactor> MfaFactors => Set<MfaFactor>();
-            public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
+    public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
+        public DbSet<Session> Sessions => Set<Session>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -98,6 +99,36 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
             // The same code can't be stored twice for one user, and looking up by hash stays fast.
             e.HasIndex(x => new { x.UserId, x.CodeHash }).IsUnique().HasDatabaseName("ux_recovery_codes_user_hash");
             e.ToTable(t => t.HasCheckConstraint("ck_recovery_codes_hash", "length(code_hash) = 64"));
+        });
+    
+            b.Entity<Session>(e =>
+        {
+            e.ToTable("sessions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.UserId).HasColumnName("user_id").IsRequired();
+            e.Property(x => x.CurrentRefreshHash).HasColumnName("current_refresh_hash").HasMaxLength(64).IsRequired();
+            e.Property(x => x.PreviousRefreshHash).HasColumnName("previous_refresh_hash").HasMaxLength(64);
+            e.Property(x => x.LastSeenAt).HasColumnName("last_seen_at");
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            e.Property(x => x.RevokedAt).HasColumnName("revoked_at");
+            e.Property(x => x.RevokeReason).HasColumnName("revoke_reason").HasMaxLength(32);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+
+            // Refresh looks a session up by the token's hash, so both hashes need an index.
+            e.HasIndex(x => x.CurrentRefreshHash).IsUnique().HasDatabaseName("ux_sessions_current_hash");
+            e.HasIndex(x => x.PreviousRefreshHash).HasDatabaseName("ix_sessions_previous_hash");
+            // "Sign out everywhere" finds all of one user's sessions.
+            e.HasIndex(x => x.UserId).HasDatabaseName("ix_sessions_user");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_sessions_current_hash", "length(current_refresh_hash) = 64");
+                t.HasCheckConstraint("ck_sessions_expiry", "expires_at > created_at");
+            });
         });
     }
 }
