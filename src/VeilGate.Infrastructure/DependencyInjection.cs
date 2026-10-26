@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<ISessionRepository, SessionRepository>();
         services.AddSingleton<Application.Detection.IDetector, Detection.RegexDetector>();
         services.AddSingleton<Application.Detection.IDetector, Detection.DictionaryDetector>();
+        services.AddSingleton<Application.Detection.IDetector, Detection.NameHeuristicDetector>();
                 services.AddScoped<IAuditWriter, HashChainAuditWriter>();
         services.AddScoped<IAuditChainVerifier, AuditChainVerifier>();
         services.AddScoped<ISecurityEventWriter, SecurityEventWriter>();
