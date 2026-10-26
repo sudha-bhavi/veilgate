@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
         services.AddSingleton<Application.Detection.IDetector, Detection.RegexDetector>();
+        services.AddSingleton<Application.Detection.IDetector, Detection.DictionaryDetector>();
         services.AddSingleton<ISecretProtector>(sp =>
         {
             var base64 = sp.GetRequiredService<IConfiguration>()["Security:MfaEncryptionKey"];
