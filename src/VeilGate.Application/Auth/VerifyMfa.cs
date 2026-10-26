@@ -9,7 +9,7 @@ namespace VeilGate.Application.Auth;
 /// <param name="Code">Either the 6-digit code from the authenticator app, or a one-time recovery code.</param>
 public sealed record VerifyMfaCommand(Guid UserId, Guid TenantId, int TokenVersion, string Code);
 
-public sealed record VerifyMfaResult(string AccessToken);
+public sealed record VerifyMfaResult(string AccessToken, string RefreshToken, DateTimeOffset RefreshExpiresAt);
 
 public sealed class VerifyMfaValidator : AbstractValidator<VerifyMfaCommand>
 {
@@ -21,7 +21,7 @@ public sealed class VerifyMfaValidator : AbstractValidator<VerifyMfaCommand>
 
 /// <summary>Step 2 of sign-in: an MFA code (or a recovery code) turns the temporary token into a real access token.</summary>
 public sealed class VerifyMfaHandler(
-    IUserRepository users, IMfaFactorRepository factors, IRecoveryCodeRepository recoveryCodeStore,
+    IUserRepository users, IMfaFactorRepository factors, IRecoveryCodeRepository recoveryCodeStore,ISessionRepository sessions,
     ITenantContext tenant, ISecretProtector protector, ITokenService tokens, IClock clock,
     IValidator<VerifyMfaCommand> validator)
 {
@@ -71,17 +71,24 @@ public sealed class VerifyMfaHandler(
             methods = ["pwd", "otp"];
         }
 
-        user.RegisterSuccessfulLogin(now);
+               user.RegisterSuccessfulLogin(now);
+
+        // Sign-in is complete, so this device gets a session. The browser keeps the raw token; we store only its hash.
+        var refreshToken = RefreshTokens.Generate();
+        var session = Session.Start(user.TenantId, user.Id, RefreshTokens.Hash(refreshToken), now).Value;
+        sessions.Add(session);
+
+        // All repositories share one DbContext per request, so this one save writes the user, factor and session together.
         await factors.SaveChangesAsync(ct);
 
         var accessToken = tokens.IssueAccessToken(new AccessTokenClaims(
             user.Id, user.TenantId, user.Role.ToString(),
-            SessionId: Guid.CreateVersion7(),   // real sessions arrive with refresh tokens
+            SessionId: session.Id,   // the access token now points at a real session
             Amr: methods,
             AuthTime: now,
             TokenVersion: user.TokenVersion), now);
 
-        return new VerifyMfaResult(accessToken);
+        return new VerifyMfaResult(accessToken, refreshToken, session.ExpiresAt);
     }
 
     // A wrong code counts like a wrong password: 5 in a row lock the account for 15 minutes.

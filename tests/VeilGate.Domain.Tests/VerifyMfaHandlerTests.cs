@@ -21,6 +21,7 @@ public class VerifyMfaHandlerTests
     private readonly TenantContext _tenant = new();
     private readonly AesGcmSecretProtector _protector = new(RandomNumberGenerator.GetBytes(32));
         private readonly IRecoveryCodeRepository _recovery = Substitute.For<IRecoveryCodeRepository>();
+            private readonly ISessionRepository _sessions = Substitute.For<ISessionRepository>();
     private AccessTokenClaims? _issued;
 
     public VerifyMfaHandlerTests()
@@ -32,7 +33,7 @@ public class VerifyMfaHandlerTests
     }
 
       private VerifyMfaHandler Handler() =>
-        new(_users, _factors, _recovery, _tenant, _protector, _tokens, _clock, new VerifyMfaValidator());
+        new(_users, _factors, _recovery, _sessions, _tenant, _protector, _tokens, _clock, new VerifyMfaValidator());
 
     // An active user with a confirmed MFA factor, as it would sit in the database.
     private (User user, MfaFactor factor, byte[] secret) GivenEnrolledUser(bool confirmed = true)
@@ -200,5 +201,22 @@ public class VerifyMfaHandlerTests
 
         r.IsFailure.Should().BeTrue();
         user.FailedAttempts.Should().Be(1);
+    }
+        [Fact]
+    public async Task A_valid_code_starts_a_session_and_returns_its_refresh_token()
+    {
+        var (user, _, secret) = GivenEnrolledUser();
+        var added = new List<Session>();
+        _sessions.When(x => x.Add(Arg.Any<Session>())).Do(c => added.Add(c.Arg<Session>()));
+
+        var r = await Handler().HandleAsync(Cmd(user, CodeNow(secret)));
+
+        r.IsSuccess.Should().BeTrue();
+        added.Should().ContainSingle();
+        var s = added[0];
+        s.UserId.Should().Be(user.Id);
+        s.CurrentRefreshHash.Should().Be(RefreshTokens.Hash(r.Value.RefreshToken));   // we stored the hash, gave out the token
+        _issued!.SessionId.Should().Be(s.Id);
+        r.Value.RefreshExpiresAt.Should().Be(s.ExpiresAt);
     }
 }

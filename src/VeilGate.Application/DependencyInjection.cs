@@ -12,6 +12,8 @@ public static class DependencyInjection
                 services.AddScoped<Auth.StartTotpEnrollmentHandler>();
         services.AddScoped<Auth.ConfirmTotpHandler>();
                 services.AddScoped<Auth.VerifyMfaHandler>();
+                        services.AddScoped<Auth.RefreshHandler>();
+        services.AddScoped<Auth.LogoutHandler>();
         return services;
     }
 }
