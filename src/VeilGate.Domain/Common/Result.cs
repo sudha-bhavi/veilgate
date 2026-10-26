@@ -10,9 +10,13 @@ public sealed record Error(string Code, string Message, ErrorKind Kind = ErrorKi
     public static Error Forbidden(string code = "auth.forbidden", string message = "Forbidden") => new(code, message, ErrorKind.Forbidden);
     public static Error Unauthorized(string code, string message) => new(code, message, ErrorKind.Unauthorized);
     public static Error Locked(string code, string message) => new(code, message, ErrorKind.Locked);
+    /// <summary>The request is well-formed but policy refuses it (policy.blocked, leak.gate_tripped): HTTP 422.</summary>
+    public static Error Unprocessable(string code, string message) => new(code, message, ErrorKind.Unprocessable);
+    public static Error ProviderUnavailable() => new("provider.unavailable", "The language model provider is unavailable.", ErrorKind.BadGateway);
+    public static Error ProviderTimeout() => new("provider.timeout", "The language model provider timed out.", ErrorKind.GatewayTimeout);
 }
 
-public enum ErrorKind { Failure, Validation, NotFound, Conflict, Forbidden, Unauthorized, Locked }
+public enum ErrorKind { Failure, Validation, NotFound, Conflict, Forbidden, Unauthorized, Locked, Unprocessable, BadGateway, GatewayTimeout }
 
 public class Result
 {

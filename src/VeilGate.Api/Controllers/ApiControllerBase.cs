@@ -16,6 +16,9 @@ public abstract class ApiControllerBase : ControllerBase
             ErrorKind.NotFound => StatusCodes.Status404NotFound,
             ErrorKind.Conflict => StatusCodes.Status409Conflict,
             ErrorKind.Locked => StatusCodes.Status423Locked,
+            ErrorKind.Unprocessable => StatusCodes.Status422UnprocessableEntity,
+            ErrorKind.BadGateway => StatusCodes.Status502BadGateway,
+            ErrorKind.GatewayTimeout => StatusCodes.Status504GatewayTimeout,
             _ => StatusCodes.Status500InternalServerError
         };
         var problem = new ProblemDetails { Status = status, Title = error.Message };

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VeilGate.Application.Abstractions;
+using VeilGate.Infrastructure.Llm;
 using VeilGate.Infrastructure.Persistence;
 using VeilGate.Infrastructure.Security;
 
@@ -13,6 +14,7 @@ public static class DependencyInjection
     {
         services.AddScoped<ITenantContext, TenantContext>();
         services.AddScoped<TenantConnectionInterceptor>();
+        services.AddLlmGateway(config.GetSection(Llm.LlmOptions.Section).Get<Llm.LlmOptions>() ?? new Llm.LlmOptions());
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IMfaFactorRepository, MfaFactorRepository>();
