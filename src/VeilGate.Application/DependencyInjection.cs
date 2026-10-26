@@ -15,6 +15,7 @@ public static class DependencyInjection
                         services.AddScoped<Auth.RefreshHandler>();
         services.AddScoped<Auth.LogoutHandler>();
         services.AddScoped<Detection.IDetectionPipeline, Detection.DetectionPipeline>();
+        services.AddScoped<Policies.IPolicyEngine, Policies.PolicyEngine>();
         return services;
     }
 }
