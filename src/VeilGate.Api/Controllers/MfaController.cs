@@ -54,7 +54,7 @@ public sealed class MfaController(
 
         var result = await verify.HandleAsync(new VerifyMfaCommand(userId, tenantId, version, request.Code), ct);
         if (result.IsFailure) return Fail(result.Error);
-
+        RefreshCookie.Write(Response, result.Value.RefreshToken, result.Value.RefreshExpiresAt);
         return Ok(new
         {
             accessToken = result.Value.AccessToken,

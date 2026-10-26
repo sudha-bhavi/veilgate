@@ -10,6 +10,7 @@ using VeilGate.Domain;
 using VeilGate.Infrastructure.Security;
 using VeilGate.TestSupport;
 using Xunit;
+using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace VeilGate.Api.Tests;
 
@@ -20,6 +21,8 @@ public sealed class MfaApiTests : IDisposable
     private const string Start = "/api/v1/auth/mfa/totp/start";
     private const string Confirm = "/api/v1/auth/mfa/totp/confirm";
         private const string Verify = "/api/v1/auth/mfa/verify";
+            private const string Refresh = "/api/v1/auth/refresh";
+    private const string Logout = "/api/v1/auth/logout";
 
     private readonly PostgresFixture _pg;
     private readonly AuthApiFactory _factory;
@@ -29,7 +32,8 @@ public sealed class MfaApiTests : IDisposable
     {
         _pg = pg;
         _factory = new AuthApiFactory(pg);
-        _client = _factory.CreateClient();
+                // We handle cookies by hand, so the tests see exactly what the server sends.
+        _client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
     }
 
     public void Dispose()
@@ -321,5 +325,87 @@ public sealed class MfaApiTests : IDisposable
         // A different code from the same set still works.
         var other = await PostAsync(Verify, await MfaTokenAsync(user), new { code = codes[1] });
         other.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+        // ---------- sessions: refresh and logout ----------
+
+    // The refresh token arrives only as a cookie. Pull its value out of the Set-Cookie header.
+    private static string? RefreshCookieOf(HttpResponseMessage r) =>
+        r.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.Select(v => v.Split(';')[0])
+                    .Where(p => p.StartsWith("vg_refresh=") && p.Length > "vg_refresh=".Length)
+                    .Select(p => p["vg_refresh=".Length..])
+                    .FirstOrDefault()
+            : null;
+
+    private async Task<HttpResponseMessage> PostWithCookieAsync(string path, string? refreshToken)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, path);
+        if (refreshToken is not null) req.Headers.Add("Cookie", $"vg_refresh={refreshToken}");
+        return await _client.SendAsync(req);
+    }
+
+    // A user who has fully signed in (password + MFA), and the refresh cookie they got.
+    private async Task<(User user, string refreshToken, HttpResponseMessage verify)> SignedInAsync()
+    {
+        var (user, key, token) = await EnrolledUserAsync();
+        var verify = await PostAsync(Verify, token, new { code = CodeFor(key, secondsFromNow: 30) });
+        verify.StatusCode.Should().Be(HttpStatusCode.OK);
+        return (user, RefreshCookieOf(verify)!, verify);
+    }
+
+    [Fact]
+    public async Task Sign_in_sets_a_secure_http_only_refresh_cookie_and_keeps_it_out_of_the_body()
+    {
+        var (_, refreshToken, verify) = await SignedInAsync();
+
+        refreshToken.Should().NotBeNullOrEmpty();
+        var header = verify.Headers.GetValues("Set-Cookie").Single(v => v.StartsWith("vg_refresh=")).ToLowerInvariant();
+        header.Should().Contain("httponly").And.Contain("secure").And.Contain("samesite=strict").And.Contain("path=/api/v1/auth");
+        (await verify.Content.ReadAsStringAsync()).Should().NotContain(refreshToken);
+    }
+
+    [Fact]
+    public async Task Refresh_gives_a_working_access_token_and_a_new_cookie()
+    {
+        var (_, first, _) = await SignedInAsync();
+
+        var r = await PostWithCookieAsync(Refresh, first);
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        RefreshCookieOf(r).Should().NotBeNullOrEmpty().And.NotBe(first);
+        using var body = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
+        var me = new HttpRequestMessage(HttpMethod.Get, "/api/v1/me");
+        me.Headers.Authorization = new AuthenticationHeaderValue("Bearer", body.RootElement.GetProperty("accessToken").GetString());
+        (await _client.SendAsync(me)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Replaying_an_old_refresh_token_ends_the_whole_session()
+    {
+        var (_, first, _) = await SignedInAsync();
+        var second = RefreshCookieOf(await PostWithCookieAsync(Refresh, first))!;
+
+        var replay = await PostWithCookieAsync(Refresh, first);   // a thief uses the stolen old token
+
+        replay.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await CodeOf(replay)).Should().Be("auth.refresh_reused");
+        (await PostWithCookieAsync(Refresh, second)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);   // the real user's token is dead too
+    }
+
+    [Fact]
+    public async Task After_logout_the_refresh_token_no_longer_works()
+    {
+        var (_, token, _) = await SignedInAsync();
+
+        (await PostWithCookieAsync(Logout, token)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await PostWithCookieAsync(Refresh, token)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Refresh_without_a_cookie_is_rejected_and_logout_without_one_is_fine()
+    {
+        (await PostWithCookieAsync(Refresh, null)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await PostWithCookieAsync(Logout, null)).StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 }
