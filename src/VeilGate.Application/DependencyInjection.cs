@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddSingleton<Transformation.ITransformer, Transformation.Transformer>();
         services.AddScoped<Transformation.IOutboundLeakGate, Transformation.OutboundLeakGate>();
         services.AddScoped<Transformation.IRehydrator, Transformation.Rehydrator>();
+        services.AddScoped<Gateway.IGatewayPipeline, Gateway.GatewayPipeline>();
         return services;
     }
 }

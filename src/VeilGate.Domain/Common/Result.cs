@@ -1,9 +1,18 @@
 namespace VeilGate.Domain.Common;
 
 /// <summary>A failure with a stable machine code (see Backend Design, error catalog) and an HTTP-friendly kind.</summary>
-public sealed record Error(string Code, string Message, ErrorKind Kind = ErrorKind.Failure)
+public sealed record Error(string Code, string Message, ErrorKind Kind = ErrorKind.Failure, IReadOnlyDictionary<string, object?>? Extensions = null)
 {
     public static readonly Error None = new(string.Empty, string.Empty);
+
+    /// <summary>Adds a machine-readable field to the error, e.g. the entity types that caused policy.blocked. The API copies these into the problem+json body.</summary>
+    public Error With(string key, object? value)
+    {
+        var copy = Extensions is null ? new Dictionary<string, object?>() : new Dictionary<string, object?>(Extensions);
+        copy[key] = value;
+        return this with { Extensions = copy };
+    }
+
     public static Error NotFound(string code = "resource.not_found", string message = "Not found") => new(code, message, ErrorKind.NotFound);
     public static Error Validation(string code, string message) => new(code, message, ErrorKind.Validation);
     public static Error Conflict(string code, string message) => new(code, message, ErrorKind.Conflict);

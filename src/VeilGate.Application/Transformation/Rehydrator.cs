@@ -20,6 +20,24 @@ public sealed class Rehydrator(IVaultService vault) : IRehydrator
 {
     private static readonly Regex TokenPattern = new(@"\[\[[A-Za-z0-9_]+_[A-Z2-7]{4}\]\]", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 
+    /// <summary>Restores from tokens already in memory (a session this request just created), with no database read.</summary>
+    public static RestoreResult RestoreFrom(string text, IReadOnlyDictionary<string, string> known)
+    {
+        var replaced = 0;
+        var unresolved = new List<string>();
+        var restored = TokenPattern.Replace(text, m =>
+        {
+            if (!known.TryGetValue(m.Value, out var original))
+            {
+                if (!unresolved.Contains(m.Value)) unresolved.Add(m.Value);
+                return m.Value;
+            }
+            replaced++;
+            return original;
+        });
+        return new RestoreResult(restored, replaced, unresolved);
+    }
+
     public async Task<RestoreResult> RestoreAsync(string text, VaultSession session, CancellationToken ct = default)
     {
         var tokens = TokenPattern.Matches(text).Select(m => m.Value).Distinct().ToList();

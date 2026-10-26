@@ -23,6 +23,8 @@ public abstract class ApiControllerBase : ControllerBase
         };
         var problem = new ProblemDetails { Status = status, Title = error.Message };
         problem.Extensions["code"] = error.Code;
+        if (error.Extensions is not null)
+            foreach (var (key, value) in error.Extensions) problem.Extensions[key] = value;
         return new ObjectResult(problem) { StatusCode = status, ContentTypes = { "application/problem+json" } };
     }
 }
