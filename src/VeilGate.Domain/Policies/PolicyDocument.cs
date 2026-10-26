@@ -18,4 +18,13 @@ public sealed record PolicyDocument
 
     public EntityRule RuleFor(string entityType) =>
         Entities.TryGetValue(entityType, out var rule) ? rule : new EntityRule(DefaultAction);
+
+        public bool ReidentifyEnabled { get; init; } = false;
+    public int ReidentifyTtlSeconds { get; init; } = 3600;
+
+    /// <summary>Whether to run detection on the model's answer too (leak gate on output).</summary>
+    public bool ScanOutput { get; init; } = true;
+    public PolicyAction OutputOnLeak { get; init; } = PolicyAction.Redact;   // Redact or Block only
+
+    public int MaxTextChars { get; init; } = 32768;
 }
