@@ -1,6 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using VeilGate.Domain;
 using VeilGate.Domain.Vault;
+using System.Net;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using VeilGate.Domain.Audit;
 
 namespace VeilGate.Infrastructure.Persistence;
 
@@ -14,6 +18,7 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<VaultSession> VaultSessions => Set<VaultSession>();
     public DbSet<VaultToken> VaultTokens => Set<VaultToken>();
     public DbSet<TenantKey> TenantKeys => Set<TenantKey>();
+        public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -201,6 +206,48 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
 
             e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
             e.ToTable(t => t.HasCheckConstraint("ck_tenant_keys_status", "status in ('Active','Retired')"));
+        });
+                b.Entity<AuditEvent>(e =>
+        {
+            e.ToTable("audit_events");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.Seq).HasColumnName("seq");
+            e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            e.Property(x => x.ActorType).HasColumnName("actor_type").HasMaxLength(10).IsRequired();
+            e.Property(x => x.ActorId).HasColumnName("actor_id");
+            e.Property(x => x.Action).HasColumnName("action").HasMaxLength(60).IsRequired();
+            e.Property(x => x.ResourceType).HasColumnName("resource_type").HasMaxLength(40);
+            e.Property(x => x.ResourceId).HasColumnName("resource_id");
+            e.Property(x => x.Result).HasColumnName("result").HasMaxLength(10).IsRequired();
+            e.Property(x => x.Ip).HasColumnName("ip").HasColumnType("inet")
+                .HasConversion(v => IPAddress.Parse(v), v => v.ToString());   // text in our code, inet in the database
+            e.Property(x => x.Details).HasColumnName("details").HasColumnType("jsonb").IsRequired()
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, string>(),
+                    new ValueComparer<IReadOnlyDictionary<string, string>>(
+                        (x, y) => x!.Count == y!.Count && !x.Except(y).Any(),
+                        v => v.Aggregate(0, (h, kv) => HashCode.Combine(h, kv.Key, kv.Value)),
+                        v => new Dictionary<string, string>(v)));
+            e.Property(x => x.PrevHash).HasColumnName("prev_hash").HasMaxLength(64).IsFixedLength().IsRequired();
+            e.Property(x => x.Hash).HasColumnName("hash").HasMaxLength(64).IsFixedLength().IsRequired();
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+
+            // Chain order and cursor paging. Gap-free numbering per tenant is enforced by this unique index.
+            e.HasIndex(x => new { x.TenantId, x.Seq }).IsUnique().HasDatabaseName("ux_audit_events_tenant_seq");
+            e.HasIndex(x => new { x.TenantId, x.OccurredAt }).IsDescending(false, true).HasDatabaseName("ix_audit_events_time");
+            e.HasIndex(x => new { x.TenantId, x.ActorId, x.OccurredAt }).IsDescending(false, false, true).HasDatabaseName("ix_audit_events_actor");
+            e.HasIndex(x => new { x.TenantId, x.Action, x.OccurredAt }).IsDescending(false, false, true).HasDatabaseName("ix_audit_events_action");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_audit_events_seq", "seq >= 1");
+                t.HasCheckConstraint("ck_audit_events_hash", "length(hash) = 64 and length(prev_hash) = 64");
+                t.HasCheckConstraint("ck_audit_events_actor", "actor_type in ('user','client','system')");
+                t.HasCheckConstraint("ck_audit_events_result", "result in ('success','failure','denied')");
+            });
         });
     }
 }

@@ -1,4 +1,5 @@
 using VeilGate.Domain.Common;
+using System.Net;
 
 namespace VeilGate.Domain.Audit;
 
@@ -50,6 +51,11 @@ public sealed class AuditEvent
             if (value.Length > 200) return Error.Validation("validation.failed", $"Audit detail '{key}' is too long.");
         }
 
+        if (ip is not null)
+        {
+            if (!IPAddress.TryParse(ip, out var parsed)) return Error.Validation("validation.failed", "IP address is not valid.");
+            ip = parsed.ToString();   // one canonical spelling, so the hash survives a round trip through PostgreSQL's inet type
+        }
         // PostgreSQL stores time to the microsecond, .NET to 100 nanoseconds. If we kept the extra digit, the hash we compute now
         // would differ from the hash recomputed from the database later, and verification would wrongly report tampering.
         var utc = now.UtcDateTime;

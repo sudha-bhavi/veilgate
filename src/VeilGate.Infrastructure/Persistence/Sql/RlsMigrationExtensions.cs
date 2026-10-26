@@ -53,6 +53,48 @@ public static class RlsMigrationExtensions
             """);
     }
 
+       /// <summary>
+    /// Like ProtectTenantTable, but the app role may only read and add rows. No UPDATE, no DELETE (Database doc 6.2).
+    /// There is deliberately no update or delete policy, so row-level security refuses them even if a grant were added by mistake.
+    /// </summary>
+    public static void ProtectAppendOnlyTable(this MigrationBuilder mb, string table)
+    {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(table, "^[a-z_]+$"))
+            throw new ArgumentException("Table name must be lowercase letters and underscores.", nameof(table));
+
+        mb.Sql($"""
+            ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
+
+            DROP POLICY IF EXISTS {table}_select   ON {table};
+            DROP POLICY IF EXISTS {table}_insert   ON {table};
+            DROP POLICY IF EXISTS {table}_migrator ON {table};
+            CREATE POLICY {table}_select ON {table} FOR SELECT TO vg_app USING (tenant_id = app_current_tenant());
+            CREATE POLICY {table}_insert ON {table} FOR INSERT TO vg_app WITH CHECK (tenant_id = app_current_tenant());
+            CREATE POLICY {table}_migrator ON {table} FOR ALL TO vg_migrator USING (true) WITH CHECK (true);
+
+            REVOKE ALL ON {table} FROM vg_app, vg_readonly;
+            GRANT SELECT, INSERT ON {table} TO vg_app;
+            """);
+    }
+
+    /// <summary>
+    /// Triggers that refuse UPDATE, DELETE and TRUNCATE on audit_events for everyone, including the table owner (Database doc 6.3).
+    /// Grants stop the app role; the trigger stops mistakes and stolen admin credentials too.
+    /// </summary>
+    public static void CreateAuditAppendOnlyTriggers(this MigrationBuilder mb) => mb.Sql("""
+        CREATE OR REPLACE FUNCTION audit_block_mutation() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'audit_events is append-only'; END $$;
+
+        DROP TRIGGER IF EXISTS audit_no_update   ON audit_events;
+        DROP TRIGGER IF EXISTS audit_no_truncate ON audit_events;
+        CREATE TRIGGER audit_no_update BEFORE UPDATE OR DELETE ON audit_events
+            FOR EACH ROW EXECUTE FUNCTION audit_block_mutation();
+        CREATE TRIGGER audit_no_truncate BEFORE TRUNCATE ON audit_events
+            FOR EACH STATEMENT EXECUTE FUNCTION audit_block_mutation();
+        """);
+   
     /// <summary>
     /// Login has to find a user by email BEFORE the tenant is known. This SECURITY DEFINER function is the one narrow,
     /// read-only door through row-level security. It returns only what the login flow needs and never the whole row.
