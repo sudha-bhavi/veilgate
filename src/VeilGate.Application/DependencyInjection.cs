@@ -16,6 +16,7 @@ public static class DependencyInjection
         services.AddScoped<Auth.LogoutHandler>();
         services.AddScoped<Detection.IDetectionPipeline, Detection.DetectionPipeline>();
         services.AddScoped<Policies.IPolicyEngine, Policies.PolicyEngine>();
+        services.AddSingleton<Policies.IPolicyResolver, Policies.BuiltInPolicyResolver>();
         services.AddSingleton<Transformation.ITransformer, Transformation.Transformer>();
         services.AddScoped<Transformation.IOutboundLeakGate, Transformation.OutboundLeakGate>();
         services.AddScoped<Transformation.IRehydrator, Transformation.Rehydrator>();
