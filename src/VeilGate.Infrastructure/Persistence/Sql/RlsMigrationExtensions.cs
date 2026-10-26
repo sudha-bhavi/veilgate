@@ -71,4 +71,23 @@ public static class RlsMigrationExtensions
         REVOKE ALL ON FUNCTION auth_find_user_by_email(citext) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION auth_find_user_by_email(citext) TO vg_app;
         """);
+
+    /// <summary>
+    /// Refresh has to find a session BEFORE the tenant is known (the request carries only the refresh token).
+    /// Like the login lookup, this is a narrow read-only door through row-level security: it returns only the tenant id.
+    /// It matches the previous hash too, so a replayed old token can still be found and the session revoked.
+    /// </summary>
+    public static void CreateSessionLookupFunction(this MigrationBuilder mb) => mb.Sql("""
+        DROP FUNCTION IF EXISTS auth_find_session_tenant(varchar);
+        CREATE FUNCTION auth_find_session_tenant(p_hash varchar)
+        RETURNS uuid
+        LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+            SELECT s.tenant_id FROM sessions s
+            WHERE s.current_refresh_hash = p_hash OR s.previous_refresh_hash = p_hash
+            LIMIT 1
+        $$;
+        REVOKE ALL ON FUNCTION auth_find_session_tenant(varchar) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION auth_find_session_tenant(varchar) TO vg_app;
+        """);
 }

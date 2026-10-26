@@ -120,4 +120,40 @@ public class SessionRepositoryTests(PostgresFixture pg)
 
         (await new SessionRepository(db).FindByRefreshHashAsync(hash, default)).Should().BeNull();
     }
+        // A context with NO tenant set, like a refresh request before we know who it is.
+    private VeilGateDbContext NoTenantContext() =>
+        new(new DbContextOptionsBuilder<VeilGateDbContext>()
+            .UseNpgsql(pg.AppConnection)
+            .AddInterceptors(new TenantConnectionInterceptor(new TenantContext()))
+            .Options);
+
+    [Fact]
+    public async Task Without_a_tenant_the_lookup_still_finds_the_owner_of_a_current_or_old_token()
+    {
+        var (t, u) = await SeedUser();
+        var first = NewHash();
+        await SaveSession(t, u, first);
+        var second = NewHash();
+        await using (var db = AppContext(t.Id))
+        {
+            var repo = new SessionRepository(db);
+            (await repo.FindByRefreshHashAsync(first, default))!.Rotate(first, second, Now.AddMinutes(1));
+            await repo.SaveChangesAsync(default);
+        }
+
+        await using var noTenant = NoTenantContext();
+        var repoNoTenant = new SessionRepository(noTenant);
+
+        (await repoNoTenant.FindTenantByRefreshHashAsync(second, default)).Should().Be(t.Id);   // current token
+        (await repoNoTenant.FindTenantByRefreshHashAsync(first, default)).Should().Be(t.Id);    // old token, so reuse can be caught
+        (await repoNoTenant.FindByRefreshHashAsync(second, default)).Should().BeNull();         // RLS still hides the row itself
+    }
+
+    [Fact]
+    public async Task The_lookup_returns_nothing_for_an_unknown_token()
+    {
+        await using var db = NoTenantContext();
+
+        (await new SessionRepository(db).FindTenantByRefreshHashAsync(NewHash(), default)).Should().BeNull();
+    }
 }
