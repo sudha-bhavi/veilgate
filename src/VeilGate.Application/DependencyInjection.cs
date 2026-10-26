@@ -14,6 +14,7 @@ public static class DependencyInjection
                 services.AddScoped<Auth.VerifyMfaHandler>();
                         services.AddScoped<Auth.RefreshHandler>();
         services.AddScoped<Auth.LogoutHandler>();
+        services.AddScoped<Detection.IDetectionPipeline, Detection.DetectionPipeline>();
         return services;
     }
 }
