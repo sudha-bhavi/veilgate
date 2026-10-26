@@ -13,8 +13,8 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 | M0        | Solution skeleton, Docker Compose, Postgres roles, health endpoint, first tests | ✅ Done |
 | M1        | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh             | ✅ Done |
 | M2        | Detection engine, policy engine, tokenizer + vault                              | ✅ Done |
-| M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                    | next    |
-| M4        | Policy workflow, API clients, evaluations                                       |         |
+| M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                    | ✅ Done |
+| M4        | Policy workflow, API clients, evaluations                                       | next    |
 | M5        | React console                                                                   |         |
 | M6        | Kafka outbox, workers, dashboards                                               |         |
 | M7        | Hardening, pen test, deployment                                                 |         |
@@ -117,3 +117,28 @@ text -> TextNormalizer -> DetectionPipeline (RegexDetector, DictionaryDetector) 
 - New migration `AddVault` (tables `tenant_keys`, `vault_sessions`, `vault_tokens`, all with row-level security). Apply it with `dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api`.
 - New setting `Security:VaultKek` (32 random bytes, base64). `appsettings.Development.json` has a development-only value. In any other environment set it yourself: `openssl rand -base64 32` (production will use Key Vault).
 - Token format is `[[TYPE_XXXX]]` (underscore), as in Backend doc 6.2 and Database doc 3.4.
+
+## M3: the gateway
+
+```
+POST /api/v1/gateway/detect            scope gateway:detect       find entities, positions only
+POST /api/v1/gateway/deidentify        scope gateway:deidentify   safe text + vault session
+POST /api/v1/gateway/reidentify        scope gateway:reidentify   put the originals back
+POST /api/v1/gateway/chat/completions  scope gateway:invoke       OpenAI-compatible: protect, forward, check, restore
+POST /api/v1/playground/run            signed-in Developer / Security Officer / Tenant Admin
+```
+
+- **Tokens.** Gateway endpoints take a *client* token (claims `client_id`, `tid`, `scope`); a person's token is refused there, and a client token is refused on every console endpoint.
+  Nothing issues client tokens yet: `/oauth/token` and stored API clients arrive in M4 (tests mint tokens in-process). The playground works today for a signed-in user.
+- **Policy.** Until policies are stored and approved (M4) every request uses the built-in `hipaa-safe-harbor` template (`PolicyTemplates`).
+- **Model providers** come from the `Llm` configuration section (`Llm__Providers__0__BaseUrl` and so on); in Development `mock-llm` points at the WireMock container on port 8089.
+  Each provider gets its own timeouts, retries (2, with backoff and jitter), circuit breaker and concurrency limit, and the destination address is checked against private and metadata ranges on every connection (set `Llm:AllowPrivateNetworks` only in Development).
+- **Audit.** Every gateway call appends a row to `audit_events`, a per-tenant hash chain (`HashChainAuditWriter`, verified by `AuditChainVerifier`). The table is append-only: the app role cannot UPDATE or DELETE, and a trigger refuses it for everyone.
+  Rows hold counts and ids, never text. Blocked leaks are written to `security_events`.
+- **Apply the new migrations** to your dev database (`AddAuditEvents`, `AddSecurityEvents`, plus `AddVault` from M2):
+
+```bash
+dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
+```
+
+Not in M3: streaming responses, FHIR, idempotency keys, the `gateway_requests` / `detections` tables and their partitions, signed audit checkpoints, and the ONNX name model (a rule-based name detector stands in).
