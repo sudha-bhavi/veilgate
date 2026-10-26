@@ -51,10 +51,17 @@ public sealed class Transformer : ITransformer
                     token = session.TokenFor(e.Type, original);
                     replacement = token;
                     break;
-                case PolicyAction.Shift:
-                    // Date shifting comes in the next step. Until then we fail closed: hide the value rather than let it through.
-                    applied = PolicyAction.Redact;
-                    replacement = "[REDACTED]";
+                                case PolicyAction.Shift:
+                    var shifted = session.DateShiftKey.Length == 0
+                        ? null
+                        : DateShifter.Shift(original, DateShifter.OffsetDays(session.DateShiftKey, session.DateShiftSeed, item.MaxDays));
+                    if (shifted is null)
+                    {
+                        // No key, or a date format we don't understand: hide it rather than leak it.
+                        applied = PolicyAction.Redact;
+                        replacement = "[REDACTED]";
+                    }
+                    else replacement = shifted;
                     break;
                 default:   // Block must have stopped the request before we get here
                     throw new InvalidOperationException($"Action {item.Action} cannot be applied to text.");

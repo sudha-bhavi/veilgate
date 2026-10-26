@@ -20,6 +20,13 @@ public sealed class VaultSession
     public Guid ClientId { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset ExpiresAt { get; init; }
+        /// <summary>Secret for date shifting, derived from the tenant's key (set in M2c). Empty means "cannot shift".</summary>
+    public byte[] DateShiftKey { get; init; } = [];
+
+    /// <summary>Optional caller-supplied subject (e.g. a patient id) so one patient's dates move the same way in every request.</summary>
+    public string? SubjectId { get; init; }
+
+    public string DateShiftSeed => SubjectId ?? Id.ToString("N");
 
     /// <summary>token -> original value. Read-only view for the code that stores or restores them.</summary>
     public IReadOnlyDictionary<string, string> Tokens => _valueByToken;
