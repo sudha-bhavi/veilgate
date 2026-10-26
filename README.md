@@ -8,16 +8,16 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 
 ## Status
 
-| Milestone | Scope | State |
-| --- | --- | --- |
-| M0 | Solution skeleton, Docker Compose, Postgres roles, health endpoint, first tests | **This commit** |
-| M1 | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh | next |
-| M2 | Detection engine, policy engine, tokenizer + vault | |
-| M3 | Gateway endpoints, LLM provider with Polly, audit hash chain | |
-| M4 | Policy workflow, API clients, evaluations | |
-| M5 | React console | |
-| M6 | Kafka outbox, workers, dashboards | |
-| M7 | Hardening, pen test, deployment | |
+| Milestone | Scope                                                                           | State   |
+| --------- | ------------------------------------------------------------------------------- | ------- |
+| M0        | Solution skeleton, Docker Compose, Postgres roles, health endpoint, first tests | ✅ Done |
+| M1        | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh             | ✅ Done |
+| M2        | Detection engine, policy engine, tokenizer + vault                              | next    |
+| M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                    |         |
+| M4        | Policy workflow, API clients, evaluations                                       |         |
+| M5        | React console                                                                   |         |
+| M6        | Kafka outbox, workers, dashboards                                               |         |
+| M7        | Hardening, pen test, deployment                                                 |         |
 
 ## Prerequisites
 
