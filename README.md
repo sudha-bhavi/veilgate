@@ -14,7 +14,7 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 | M1        | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh             | ✅ Done |
 | M2        | Detection engine, policy engine, tokenizer + vault                              | ✅ Done |
 | M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                    | ✅ Done |
-| M4        | Policy workflow, API clients, LLM providers, evaluations                        | in progress: all but evaluations done |
+| M4        | Policy workflow, API clients, LLM providers, evaluations                        | ✅ Done |
 | M5        | React console                                                                   |         |
 | M6        | Kafka outbox, workers, dashboards                                               |         |
 | M7        | Hardening, pen test, deployment                                                 |         |
@@ -167,4 +167,21 @@ curl -s -X POST http://localhost:5000/api/v1/llm-providers -H "Authorization: Be
 dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
 ```
 
-Not yet in M4: evaluations (datasets, runs, reports), and `/auth/step-up` (so the 5-minute second-factor check cannot yet be renewed without signing in again).
+## M4f: evaluations
+
+```
+/api/v1/datasets ...             create a synthetic dataset (invented notes with known answers), list, read
+/api/v1/evaluations ...          start a run, list, read progress, leaks, report (json or md), compare two runs
+```
+
+- **A run measures a policy version on a dataset.** Every note goes through the same path as the gateway (detect, then the policy decides) and is scored against the labels: recall, precision and F1 per type, and **leaks** (a value the policy protects that was not fully covered). The gate passes only if recall reaches the threshold (default 98%) **and** nothing leaked.
+- **Runs are queued.** `POST /evaluations` returns 202 and the worker does the work: `DOTNET_ENVIRONMENT=Development dotnet run --project src/VeilGate.Workers`. Until Kafka arrives in M6 the `eval_runs` table is the queue; a run abandoned by a crashed worker is taken again, up to 3 attempts.
+- **Datasets are synthetic only.** The same seed always gives the same notes, so two policies can be compared on identical data. Compare only works for runs of the same dataset.
+- **Modes.** `rules` uses the pattern and dictionary detectors; `rules+ner` adds the name detector (a rule-based stand-in for the ONNX model).
+- **Apply the new migration** (`AddEvaluation`) to your dev database:
+
+```bash
+dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
+```
+
+Not yet in M4: `/auth/step-up` (so the 5-minute second-factor check cannot yet be renewed without signing in again).

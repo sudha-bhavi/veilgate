@@ -24,6 +24,9 @@ public interface IEvaluationRepository
 
     void AddLeaks(IEnumerable<EvalLeak> leaks);
     Task<IReadOnlyList<EvalLeak>> ListLeaksAsync(Guid runId, int skip, int take, CancellationToken ct);
+
+    /// <summary>One page of a run's leaks in dataset order (note, then position), with the note number and the leaked value.</summary>
+    Task<IReadOnlyList<LeakDetail>> ListLeakDetailsAsync(Guid runId, int skip, int take, CancellationToken ct);
         /// <summary>A run that is started again begins from nothing, so leaks from an abandoned attempt are removed first.</summary>
     Task DeleteLeaksAsync(Guid runId, CancellationToken ct);
 
@@ -35,3 +38,6 @@ public interface IEvaluationRepository
 
     Task SaveChangesAsync(CancellationToken ct);
 }
+
+/// <summary>A leak as the API shows it: where it was, in which note of the dataset, and the (synthetic) value that got through.</summary>
+public sealed record LeakDetail(Guid CaseId, int? CaseOrdinal, string EntityType, int Start, int End, string Reason, string? Value);

@@ -18,10 +18,8 @@ public sealed class EvaluationRunner(
 {
     public const int BatchSize = 100;
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly IDetector[] _detectors = detectors.ToArray();
-
-    private sealed record TypeReport(int Tp, int Fp, int Fn, double Precision, double Recall);
 
     public async Task RunAsync(Guid runId, CancellationToken ct = default)
     {

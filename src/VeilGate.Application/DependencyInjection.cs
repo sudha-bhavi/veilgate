@@ -60,6 +60,12 @@ public static class DependencyInjection
         services.AddScoped<Evaluation.CreateSyntheticDatasetHandler>();
         services.AddScoped<Evaluation.ListDatasetsHandler>();
         services.AddScoped<Evaluation.GetDatasetHandler>();
+        services.AddScoped<Evaluation.CreateEvaluationHandler>();
+        services.AddScoped<Evaluation.ListEvaluationsHandler>();
+        services.AddScoped<Evaluation.GetEvaluationHandler>();
+        services.AddScoped<Evaluation.GetEvaluationLeaksHandler>();
+        services.AddScoped<Evaluation.GetEvaluationReportHandler>();
+        services.AddScoped<Evaluation.CompareEvaluationsHandler>();
                 services.AddEvaluationRunner();
         return services;
     }

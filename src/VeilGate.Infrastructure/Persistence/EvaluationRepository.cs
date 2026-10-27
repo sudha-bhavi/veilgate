@@ -45,7 +45,18 @@ public sealed class EvaluationRepository(VeilGateDbContext db) : IEvaluationRepo
         await db.EvalRunLeaks.AsNoTracking().Where(l => l.RunId == runId)
             .OrderBy(l => l.CaseId).ThenBy(l => l.Start).ThenBy(l => l.EntityType)
             .Skip(skip).Take(take).ToListAsync(ct);
-       public Task DeleteLeaksAsync(Guid runId, CancellationToken ct) =>
+
+    public async Task<IReadOnlyList<LeakDetail>> ListLeakDetailsAsync(Guid runId, int skip, int take, CancellationToken ct) =>
+        await (from l in db.EvalRunLeaks.AsNoTracking()
+               where l.RunId == runId
+               join n in db.EvalCases.AsNoTracking() on l.CaseId equals n.Id into notes
+               from c in notes.DefaultIfEmpty()
+               orderby c.Ordinal, l.Start, l.EntityType
+               select new LeakDetail(l.CaseId, c == null ? null : c.Ordinal, l.EntityType, l.Start, l.End, l.Reason,
+                   c == null ? null : c.Text.Substring(l.Start, l.End - l.Start)))
+            .Skip(skip).Take(take).ToListAsync(ct);
+
+    public Task DeleteLeaksAsync(Guid runId, CancellationToken ct) =>
         db.EvalRunLeaks.Where(l => l.RunId == runId).ExecuteDeleteAsync(ct);
     public async Task<ClaimedRun?> ClaimNextRunAsync(TimeSpan staleAfter, int maxAttempts, CancellationToken ct)
     {
