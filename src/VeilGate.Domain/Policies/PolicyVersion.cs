@@ -51,6 +51,32 @@ public sealed class PolicyVersion : TenantEntity
         return v;
     }
 
+       /// <summary>
+    /// A rollback publishes a copy of an older version's text as a brand-new version. The text was already approved once,
+    /// so the person rolling back is the approver and nobody "submitted" it (SubmittedBy stays empty).
+    /// </summary>
+    public static Result<PolicyVersion> CreateRollback(PolicyVersion source, int versionNo, Guid actorId, DateTimeOffset now)
+    {
+        if (source.State != PolicyState.Archived)
+            return Error.Conflict("resource.conflict", "Only an earlier, archived version can be rolled back to.");
+
+        var v = new PolicyVersion
+        {
+            PolicyId = source.PolicyId,
+            VersionNo = versionNo,
+            State = PolicyState.Published,
+            Definition = source.Definition,
+            DefinitionSha256 = source.DefinitionSha256,
+            CreatedBy = actorId,
+            ApprovedBy = actorId,
+            ApprovedAt = now,
+            PublishedAt = now,
+            ChangeNote = $"Rollback to version {source.VersionNo}"
+        };
+        v.SetTenant(source.TenantId);
+        return v;
+    }
+   
     /// <summary>Only a draft can be edited. Once submitted, the text is frozen so what was reviewed is what gets published.</summary>
     public Result EditDraft(string definition)
     {
@@ -115,4 +141,6 @@ public sealed class PolicyVersion : TenantEntity
 
     private static Error NotInState(string verb, PolicyState required) =>
         Error.Conflict("resource.conflict", $"Only a {required} version can be {verb}.");
+
+    
 }
