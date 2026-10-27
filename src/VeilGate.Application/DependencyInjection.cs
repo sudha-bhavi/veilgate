@@ -37,6 +37,15 @@ public static class DependencyInjection
         services.AddScoped<Policies.ListPolicyVersionsHandler>();
         services.AddScoped<Policies.DiffPolicyHandler>();
         services.AddScoped<Policies.TestPolicyHandler>();
+
+        services.AddScoped<ApiClients.ApiClientAuditor>();
+        services.AddScoped<ApiClients.CreateApiClientHandler>();
+        services.AddScoped<ApiClients.UpdateApiClientHandler>();
+        services.AddScoped<ApiClients.RotateSecretHandler>();
+        services.AddScoped<ApiClients.RevokeApiClientHandler>();
+        services.AddScoped<ApiClients.GetApiClientHandler>();
+        services.AddScoped<ApiClients.ListApiClientsHandler>();
+        services.AddScoped<ApiClients.IssueClientTokenHandler>();
         return services;
     }
 }

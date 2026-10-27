@@ -43,12 +43,22 @@ public sealed class TokenService(ISigningKeyProvider keys, IOptions<AuthOptions>
         return _handler.CreateToken(descriptor);
     }
 
-    public const int ClientTokenMinutes = 15;   // Backend doc 3.2: expires_in 900
+    public const int ClientTokenMinutes = TokenLifetimes.ClientTokenSeconds / 60;   // Backend doc 3.2: expires_in 900
 
     public string IssueClientToken(ClientTokenClaims c, DateTimeOffset? now = null)
     {
         var o = options.Value;
         var t = (now ?? clock.UtcNow).UtcDateTime;
+        var claims = new Dictionary<string, object>
+        {
+            ["sub"] = c.ClientId.ToString(),
+            ["client_id"] = c.ClientId.ToString(),
+            ["tid"] = c.TenantId.ToString(),
+            ["scope"] = string.Join(' ', c.Scopes),   // OAuth 2.0 writes scopes as one space-separated string
+            ["jti"] = Guid.NewGuid().ToString("N")
+        };
+        if (c.RateLimitPerMinute is { } limit) claims["rlim"] = limit;   // the client's own limit, read by the gateway rate limiter
+
         var descriptor = new SecurityTokenDescriptor
         {
             Issuer = o.Issuer,
@@ -58,14 +68,7 @@ public sealed class TokenService(ISigningKeyProvider keys, IOptions<AuthOptions>
             Expires = t.AddMinutes(ClientTokenMinutes),
             TokenType = AccessTokenType,
             SigningCredentials = keys.Active,
-            Claims = new Dictionary<string, object>
-            {
-                ["sub"] = c.ClientId.ToString(),
-                ["client_id"] = c.ClientId.ToString(),
-                ["tid"] = c.TenantId.ToString(),
-                ["scope"] = string.Join(' ', c.Scopes),   // OAuth 2.0 writes scopes as one space-separated string
-                ["jti"] = Guid.NewGuid().ToString("N")
-            }
+            Claims = claims
         };
         return _handler.CreateToken(descriptor);
     }

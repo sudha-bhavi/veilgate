@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IMfaFactorRepository, MfaFactorRepository>();
         services.AddScoped<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
+        services.AddScoped<IApiClientRepository, ApiClientRepository>();
         services.AddSingleton<Application.Detection.IDetector, Detection.RegexDetector>();
         services.AddSingleton<Application.Detection.IDetector, Detection.DictionaryDetector>();
         services.AddSingleton<Application.Detection.IDetector, Detection.NameHeuristicDetector>();

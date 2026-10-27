@@ -132,4 +132,23 @@ public static class RlsMigrationExtensions
         REVOKE ALL ON FUNCTION auth_find_session_tenant(varchar) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION auth_find_session_tenant(varchar) TO vg_app;
         """);
+
+    /// <summary>
+    /// POST /oauth/token has to find an API client BEFORE the tenant is known (the request carries only the client id).
+    /// The same narrow read-only door as the login and session lookups: it returns only the tenant id of an ACTIVE client,
+    /// so a revoked client is indistinguishable from one that never existed.
+    /// </summary>
+    public static void CreateClientLookupFunction(this MigrationBuilder mb) => mb.Sql("""
+        DROP FUNCTION IF EXISTS auth_find_client_tenant(varchar);
+        CREATE FUNCTION auth_find_client_tenant(p_client_id varchar)
+        RETURNS uuid
+        LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+            SELECT c.tenant_id FROM api_clients c
+            WHERE c.client_id = p_client_id AND c.status = 'Active'
+            LIMIT 1
+        $$;
+        REVOKE ALL ON FUNCTION auth_find_client_tenant(varchar) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION auth_find_client_tenant(varchar) TO vg_app;
+        """);
 }

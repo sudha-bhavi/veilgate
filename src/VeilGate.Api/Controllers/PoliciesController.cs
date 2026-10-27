@@ -109,7 +109,7 @@ public sealed class PoliciesController(IClock clock) : ApiControllerBase
     [Authorize(Policy = AuthPolicies.PolicyReviewer)]
     public async Task<IActionResult> Publish(Guid id, [FromServices] PublishPolicyHandler handler, CancellationToken ct)
     {
-        if (RequireRecentMfa() is { } stepUp) return stepUp;
+        if (RequireRecentMfa(clock.UtcNow) is { } stepUp) return stepUp;
         var result = await handler.HandleAsync(new PublishPolicyCommand(id, Actor), ct);
         return result.IsFailure ? Fail(result.Error) : Ok(new { versionNumber = result.Value });
     }
@@ -128,7 +128,7 @@ public sealed class PoliciesController(IClock clock) : ApiControllerBase
     [Consumes("application/json")]
     public async Task<IActionResult> Rollback(Guid id, [FromBody] RollbackPolicyRequest request, [FromServices] RollbackPolicyHandler handler, CancellationToken ct)
     {
-        if (RequireRecentMfa() is { } stepUp) return stepUp;
+        if (RequireRecentMfa(clock.UtcNow) is { } stepUp) return stepUp;
         var result = await handler.HandleAsync(new RollbackPolicyCommand(id, request.VersionId, Actor), ct);
         if (result.IsFailure) return Fail(result.Error);
         return Created($"/api/v1/policies/{id}", new { versionNumber = result.Value });
@@ -158,16 +158,4 @@ public sealed class PoliciesController(IClock clock) : ApiControllerBase
         });
     }
 
-    // --------------------------------------------------------------- helpers
-
-    /// <summary>
-    /// Publishing and rolling back change what every request is checked against, so the signed-in person must have confirmed a
-    /// second factor in the last five minutes. Otherwise: 401 with a hint that a fresh check is needed (Backend doc 7.2).
-    /// </summary>
-    private IActionResult? RequireRecentMfa()
-    {
-        if (AuthPolicies.HasRecentMfa(User, clock.UtcNow)) return null;
-        Response.Headers.WWWAuthenticate = $"Bearer error=\"insufficient_user_authentication\", max_age={AuthPolicies.RecentMfaSeconds}";
-        return Fail(Error.Unauthorized("auth.insufficient_user_authentication", "Confirm your identity again to continue."));
-    }
 }

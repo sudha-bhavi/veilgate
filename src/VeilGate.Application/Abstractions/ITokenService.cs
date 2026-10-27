@@ -2,8 +2,18 @@ namespace VeilGate.Application.Abstractions;
 
 public sealed record AccessTokenClaims(Guid UserId, Guid TenantId, string Role, Guid SessionId, string[] Amr, DateTimeOffset AuthTime, int TokenVersion);
 
-/// <summary>An API client's token: who the client is, which tenant it belongs to, and what it may call (e.g. gateway:invoke).</summary>
-public sealed record ClientTokenClaims(Guid ClientId, Guid TenantId, string[] Scopes);
+/// <summary>
+/// An API client's token: who the client is, which tenant it belongs to, and what it may call (e.g. gateway:invoke).
+/// <paramref name="RateLimitPerMinute"/> is the client's own limit, carried in the token so the rate limiter needs no database read;
+/// null means "use the gateway-wide default".
+/// </summary>
+public sealed record ClientTokenClaims(Guid ClientId, Guid TenantId, string[] Scopes, int? RateLimitPerMinute = null);
+
+public static class TokenLifetimes
+{
+    /// <summary>How long a client token lives (Backend doc 3.2: expires_in 900). A revoked client is also refused on every call, so this is only the outer limit.</summary>
+    public const int ClientTokenSeconds = 900;
+}
 
 public interface ITokenService
 {

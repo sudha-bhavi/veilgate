@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using VeilGate.Api.Security;
 using VeilGate.Domain.Common;
 
 namespace VeilGate.Api.Controllers;
@@ -27,5 +28,17 @@ public abstract class ApiControllerBase : ControllerBase
         if (error.Extensions is not null)
             foreach (var (key, value) in error.Extensions) problem.Extensions[key] = value;
         return new ObjectResult(problem) { StatusCode = status, ContentTypes = { "application/problem+json" } };
+    }
+
+    /// <summary>
+    /// For actions that change what every request is checked against (publishing a policy) or hand out credentials (creating a client,
+    /// rotating a secret): the signed-in person must have confirmed a second factor in the last five minutes. Otherwise: 401 with a hint
+    /// that a fresh check is needed (Backend doc 7.2). Returns null when the check passes.
+    /// </summary>
+    protected IActionResult? RequireRecentMfa(DateTimeOffset now)
+    {
+        if (AuthPolicies.HasRecentMfa(User, now)) return null;
+        Response.Headers.WWWAuthenticate = $"Bearer error=\"insufficient_user_authentication\", max_age={AuthPolicies.RecentMfaSeconds}";
+        return Fail(Error.Unauthorized("auth.insufficient_user_authentication", "Confirm your identity again to continue."));
     }
 }

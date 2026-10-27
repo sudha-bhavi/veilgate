@@ -24,6 +24,126 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("VeilGate.Domain.ApiClients.ApiClient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("DefaultPolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("default_policy_id");
+
+                    b.PrimitiveCollection<string[]>("IpAllowlist")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("ip_allowlist");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<int>("RateLimitPerMinute")
+                        .HasColumnType("integer")
+                        .HasColumnName("rate_limit_per_minute");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.PrimitiveCollection<string[]>("Scopes")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("scopes");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId")
+                        .IsUnique();
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("TenantId", "DefaultPolicyId");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_api_clients_tenant_status");
+
+                    b.ToTable("api_clients", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_api_clients_rate", "rate_limit_per_minute between 1 and 10000");
+
+                            t.HasCheckConstraint("ck_api_clients_scopes", "cardinality(scopes) > 0 and scopes <@ ARRAY['gateway:invoke','gateway:detect','gateway:deidentify','gateway:reidentify']::text[]");
+
+                            t.HasCheckConstraint("ck_api_clients_status", "status in ('Active','Revoked')");
+                        });
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.ApiClients.ApiClientSecret", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientPk")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_pk");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("SecretHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("secret_hash");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientPk")
+                        .HasDatabaseName("ix_api_client_secrets_client");
+
+                    b.HasIndex("TenantId", "ClientPk");
+
+                    b.ToTable("api_client_secrets", (string)null);
+                });
+
             modelBuilder.Entity("VeilGate.Domain.Audit.AuditEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -764,6 +884,43 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_vault_tokens_tag", "length(tag) = 16");
                         });
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.ApiClients.ApiClient", b =>
+                {
+                    b.HasOne("VeilGate.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VeilGate.Domain.Policies.Policy", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DefaultPolicyId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.ApiClients.ApiClientSecret", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VeilGate.Domain.ApiClients.ApiClient", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientPk")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("VeilGate.Domain.Audit.AuditEvent", b =>

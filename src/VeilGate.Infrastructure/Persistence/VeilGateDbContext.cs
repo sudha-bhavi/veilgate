@@ -5,6 +5,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using VeilGate.Domain.Audit;
+using VeilGate.Domain.ApiClients;
 using VeilGate.Domain.Policies;
 
 namespace VeilGate.Infrastructure.Persistence;
@@ -23,6 +24,8 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
         public DbSet<Policy> Policies => Set<Policy>();
     public DbSet<PolicyVersion> PolicyVersions => Set<PolicyVersion>();
+    public DbSet<ApiClient> ApiClients => Set<ApiClient>();
+    public DbSet<ApiClientSecret> ApiClientSecrets => Set<ApiClientSecret>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -329,6 +332,59 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
                 t.HasCheckConstraint("ck_policy_versions_state", "state in ('Draft','PendingApproval','Published','Rejected','Archived')");
                 t.HasCheckConstraint("ck_policy_versions_approver", "approved_by is null or approved_by <> submitted_by");
             });
+        });
+
+        b.Entity<ApiClient>(e =>
+        {
+            e.ToTable("api_clients");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.ClientId).HasColumnName("client_id").HasMaxLength(40).IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(80).IsRequired();
+            e.Property(x => x.Scopes).HasColumnName("scopes").IsRequired();
+            e.Property(x => x.DefaultPolicyId).HasColumnName("default_policy_id");
+            // Database doc 2.5 says cidr[]. We keep canonical "address/prefix" text (checked by the domain), which round-trips without special converters.
+            e.Property(x => x.IpAllowlist).HasColumnName("ip_allowlist").IsRequired();
+            e.Property(x => x.RateLimitPerMinute).HasColumnName("rate_limit_per_minute");
+            e.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
+            e.Property(x => x.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(10).IsRequired();
+            e.Property(x => x.RevokedAt).HasColumnName("revoked_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.Restrict);
+            // Composite, so a client can only point at a policy of its own tenant. A null DefaultPolicyId means "no default" and is not checked.
+            e.HasOne<Policy>().WithMany().HasForeignKey(x => new { x.TenantId, x.DefaultPolicyId })
+                .HasPrincipalKey(p => new { p.TenantId, p.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasAlternateKey(x => new { x.TenantId, x.Id });
+            e.HasIndex(x => x.ClientId).IsUnique();   // /oauth/token looks clients up by this, before the tenant is known
+            e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Status }).HasDatabaseName("ix_api_clients_tenant_status");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_api_clients_status", "status in ('Active','Revoked')");
+                t.HasCheckConstraint("ck_api_clients_rate", "rate_limit_per_minute between 1 and 10000");
+                t.HasCheckConstraint("ck_api_clients_scopes",
+                    "cardinality(scopes) > 0 and scopes <@ ARRAY['gateway:invoke','gateway:detect','gateway:deidentify','gateway:reidentify']::text[]");
+            });
+        });
+
+        b.Entity<ApiClientSecret>(e =>
+        {
+            e.ToTable("api_client_secrets");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.ClientPk).HasColumnName("client_pk").IsRequired();
+            e.Property(x => x.SecretHash).HasColumnName("secret_hash").IsRequired();
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ApiClient>().WithMany().HasForeignKey(x => new { x.TenantId, x.ClientPk })
+                .HasPrincipalKey(c => new { c.TenantId, c.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => x.ClientPk).HasDatabaseName("ix_api_client_secrets_client");
         });
     }
 }

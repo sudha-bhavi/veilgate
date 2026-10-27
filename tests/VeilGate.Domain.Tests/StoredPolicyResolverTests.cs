@@ -16,9 +16,65 @@ public class StoredPolicyResolverTests
     private static readonly string ValidYaml = PolicyTemplates.YamlOf(PolicyTemplates.NamesOnly);
 
     private readonly IPolicyRepository _repo = Substitute.For<IPolicyRepository>();
+    private readonly IApiClientRepository _clients = Substitute.For<IApiClientRepository>();
     private readonly StoredPolicyResolver _resolver;
 
-    public StoredPolicyResolverTests() => _resolver = new StoredPolicyResolver(_repo, new BuiltInPolicyResolver());
+    public StoredPolicyResolverTests() => _resolver = new StoredPolicyResolver(_repo, _clients, new BuiltInPolicyResolver());
+
+    private void ClientDefaults(Guid clientId, Guid? policyId) =>
+        _clients.GetStateAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(new ApiClientState(VeilGate.Domain.ApiClients.ApiClientStatus.Active, [], policyId));
+
+    [Fact]
+    public async Task A_client_with_a_default_policy_uses_it_when_the_request_names_none()
+    {
+        var (policy, _) = Published(ValidYaml);
+        var clientId = Guid.NewGuid();
+        ClientDefaults(clientId, policy.Id);
+
+        var result = await _resolver.ResolveAsync(Tenant, clientId, null);
+
+        result.Value.Document.Name.Should().Be(PolicyTemplates.Get(PolicyTemplates.NamesOnly)!.Name);
+        result.Value.Version.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_policy_named_in_the_request_beats_the_clients_default()
+    {
+        var (named, _) = Published(PolicyTemplates.YamlOf(PolicyTemplates.HipaaSafeHarbor));
+        var (defaultPolicy, _) = Published(ValidYaml);
+        var clientId = Guid.NewGuid();
+        ClientDefaults(clientId, defaultPolicy.Id);
+
+        var result = await _resolver.ResolveAsync(Tenant, clientId, named.Id);
+
+        result.Value.Document.Name.Should().Be("hipaa-safe-harbor-v1");
+    }
+
+    [Fact]
+    public async Task A_client_without_a_default_policy_gets_the_built_in_template()
+    {
+        var clientId = Guid.NewGuid();
+        ClientDefaults(clientId, null);
+
+        var result = await _resolver.ResolveAsync(Tenant, clientId, null);
+
+        result.Value.Document.Name.Should().Be("hipaa-safe-harbor-v1");
+    }
+
+    [Fact]
+    public async Task A_default_policy_that_cannot_be_served_is_an_error_not_a_quiet_fallback()
+    {
+        var (policy, _) = Published(ValidYaml);
+        policy.Archive(Now);
+        var clientId = Guid.NewGuid();
+        ClientDefaults(clientId, policy.Id);
+
+        var result = await _resolver.ResolveAsync(Tenant, clientId, null);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("policy.default_unavailable");
+    }
 
     // A policy with one published version, wired into the fake repository.
     private (Policy policy, PolicyVersion version) Published(string yaml, Guid? tenantId = null)

@@ -92,14 +92,20 @@ try
             }));
         // The gateway is limited per caller, not per IP: one busy client behind a shared proxy must not starve the others.
         // The limiter runs after authentication (see below) so the token's client id is known here.
-        o.AddPolicy("gateway", http => RateLimitPartition.GetFixedWindowLimiter(
-            http.User.FindFirst("client_id")?.Value ?? http.User.FindFirst("sub")?.Value ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions
+        // An API client has its own limit (Database doc 2.5), carried in its token as "rlim"; anyone else gets the gateway-wide default.
+        // The limit is part of the partition key, so when a client's limit is changed its next token starts a fresh window at the new limit.
+        o.AddPolicy("gateway", http =>
+        {
+            var perClient = int.TryParse(http.User.FindFirst("rlim")?.Value, out var rlim) && rlim > 0 ? rlim : (int?)null;
+            var limit = perClient ?? http.RequestServices.GetRequiredService<IOptions<GatewayOptions>>().Value.RateLimitPerClientPerMinute;
+            var who = http.User.FindFirst("client_id")?.Value ?? http.User.FindFirst("sub")?.Value ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter($"{who}:{limit}", _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = http.RequestServices.GetRequiredService<IOptions<GatewayOptions>>().Value.RateLimitPerClientPerMinute,
+                PermitLimit = limit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
-            }));
+            });
+        });
     });
 
     builder.Services.AddApplication();
