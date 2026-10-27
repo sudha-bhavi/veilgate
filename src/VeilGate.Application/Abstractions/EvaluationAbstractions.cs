@@ -24,6 +24,8 @@ public interface IEvaluationRepository
 
     void AddLeaks(IEnumerable<EvalLeak> leaks);
     Task<IReadOnlyList<EvalLeak>> ListLeaksAsync(Guid runId, int skip, int take, CancellationToken ct);
+        /// <summary>A run that is started again begins from nothing, so leaks from an abandoned attempt are removed first.</summary>
+    Task DeleteLeaksAsync(Guid runId, CancellationToken ct);
 
     /// <summary>
     /// For the worker, with no tenant set. Atomically takes the oldest queued run (marking it running) and first recovers runs

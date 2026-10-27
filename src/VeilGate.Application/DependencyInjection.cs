@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace VeilGate.Application;
 
@@ -59,6 +60,15 @@ public static class DependencyInjection
         services.AddScoped<Evaluation.CreateSyntheticDatasetHandler>();
         services.AddScoped<Evaluation.ListDatasetsHandler>();
         services.AddScoped<Evaluation.GetDatasetHandler>();
+                services.AddEvaluationRunner();
+        return services;
+    }
+
+    /// <summary>What an evaluation worker needs from the application layer, without the HTTP-facing handlers.</summary>
+    public static IServiceCollection AddEvaluationRunner(this IServiceCollection services)
+    {
+        services.TryAddScoped<Policies.IPolicyEngine, Policies.PolicyEngine>();
+        services.AddScoped<Evaluation.EvaluationRunner>();
         return services;
     }
 }
