@@ -15,7 +15,7 @@ public sealed record PolicyParseResult(PolicyDocument? Policy, IReadOnlyList<Pol
 
 public static class PolicyParser
 {
-    private const int MaxYamlChars = 20_000;
+    public const int MaxYamlChars = 20_000;
     private static readonly string[] TopLevel = ["version", "name", "defaults", "entities", "reidentify", "output", "limits"];
 
     public static PolicyParseResult Parse(string yaml)

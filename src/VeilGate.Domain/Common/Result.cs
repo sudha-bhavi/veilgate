@@ -23,9 +23,10 @@ public sealed record Error(string Code, string Message, ErrorKind Kind = ErrorKi
     public static Error Unprocessable(string code, string message) => new(code, message, ErrorKind.Unprocessable);
     public static Error ProviderUnavailable() => new("provider.unavailable", "The language model provider is unavailable.", ErrorKind.BadGateway);
     public static Error ProviderTimeout() => new("provider.timeout", "The language model provider timed out.", ErrorKind.GatewayTimeout);
+    public static Error PreconditionFailed() => new("precondition.failed", "This changed since you loaded it. Reload and try again.", ErrorKind.PreconditionFailed);
 }
 
-public enum ErrorKind { Failure, Validation, NotFound, Conflict, Forbidden, Unauthorized, Locked, Unprocessable, BadGateway, GatewayTimeout }
+public enum ErrorKind { Failure, Validation, NotFound, Conflict, Forbidden, Unauthorized, Locked, Unprocessable, BadGateway, GatewayTimeout, PreconditionFailed }
 
 public class Result
 {

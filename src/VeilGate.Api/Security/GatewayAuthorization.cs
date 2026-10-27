@@ -21,7 +21,30 @@ public static class AuthPolicies
     /// <summary>A signed-in person with a role that may use the console playground.</summary>
     public const string Playground = "Playground";
 
+    /// <summary>Who may write and submit policies (Backend doc 4.3).</summary>
+    public const string PolicyAuthor = "PolicyAuthor";
+
+    /// <summary>Who may publish, reject and roll back policies. Publish and rollback also need a recent MFA check.</summary>
+    public const string PolicyReviewer = "PolicyReviewer";
+
+    /// <summary>Who may try a policy on sample text.</summary>
+    public const string PolicyTester = "PolicyTester";
+
+    /// <summary>How fresh the person's last MFA check must be for the most sensitive actions (Backend doc 2.2, RecentMfa).</summary>
+    public const int RecentMfaSeconds = 300;
+
+    private static readonly string[] MfaMethods = ["otp", "mfa", "webauthn", "recovery"];
+
     public static bool IsClientToken(ClaimsPrincipal user) => user.HasClaim(c => c.Type == "client_id");
+
+    /// <summary>True when the token proves a second factor and the last MFA check (auth_time) is at most <see cref="RecentMfaSeconds"/> old.</summary>
+    public static bool HasRecentMfa(ClaimsPrincipal user, DateTimeOffset now)
+    {
+        if (!user.FindAll("amr").Any(c => MfaMethods.Contains(c.Value, StringComparer.Ordinal))) return false;
+        if (!long.TryParse(user.FindFirst("auth_time")?.Value, out var seconds)) return false;
+        var age = now - DateTimeOffset.FromUnixTimeSeconds(seconds);
+        return age >= TimeSpan.FromSeconds(-30) && age <= TimeSpan.FromSeconds(RecentMfaSeconds);   // 30 s of clock skew, as for tokens
+    }
 
     public static bool HasScope(ClaimsPrincipal user, string scope) =>
         (user.FindFirst("scope")?.Value ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(scope, StringComparer.Ordinal);
@@ -41,6 +64,21 @@ public static class AuthPolicies
                 .RequireAssertion(ctx => IsClientToken(ctx.User) && HasScope(ctx.User, scope)));
 
         options.AddPolicy(Playground, p => p
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => !IsClientToken(ctx.User))
+            .RequireRole("Developer", "SecurityOfficer", "TenantAdmin"));
+
+        options.AddPolicy(PolicyAuthor, p => p
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => !IsClientToken(ctx.User))
+            .RequireRole("SecurityOfficer", "TenantAdmin"));
+
+        options.AddPolicy(PolicyReviewer, p => p
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => !IsClientToken(ctx.User))
+            .RequireRole("SecurityOfficer"));
+
+        options.AddPolicy(PolicyTester, p => p
             .RequireAuthenticatedUser()
             .RequireAssertion(ctx => !IsClientToken(ctx.User))
             .RequireRole("Developer", "SecurityOfficer", "TenantAdmin"));

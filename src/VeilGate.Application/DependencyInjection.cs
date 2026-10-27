@@ -16,13 +16,27 @@ public static class DependencyInjection
         services.AddScoped<Auth.LogoutHandler>();
         services.AddScoped<Detection.IDetectionPipeline, Detection.DetectionPipeline>();
         services.AddScoped<Policies.IPolicyEngine, Policies.PolicyEngine>();
-        services.AddSingleton<Policies.IPolicyResolver, Policies.BuiltInPolicyResolver>();
         services.AddSingleton<Transformation.ITransformer, Transformation.Transformer>();
         services.AddScoped<Transformation.IOutboundLeakGate, Transformation.OutboundLeakGate>();
         services.AddScoped<Transformation.IRehydrator, Transformation.Rehydrator>();
         services.AddScoped<Gateway.IGatewayPipeline, Gateway.GatewayPipeline>();
                 services.AddSingleton<Policies.BuiltInPolicyResolver>();
         services.AddScoped<Policies.IPolicyResolver, Policies.StoredPolicyResolver>();
+
+        services.AddScoped<Policies.PolicyAuditor>();
+        services.AddScoped<Policies.CreatePolicyHandler>();
+        services.AddScoped<Policies.SaveDraftHandler>();
+        services.AddScoped<Policies.ValidatePolicyHandler>();
+        services.AddScoped<Policies.SubmitPolicyHandler>();
+        services.AddScoped<Policies.PublishPolicyHandler>();
+        services.AddScoped<Policies.RejectPolicyHandler>();
+        services.AddScoped<Policies.RollbackPolicyHandler>();
+        services.AddScoped<Policies.ArchivePolicyHandler>();
+        services.AddScoped<Policies.GetPolicyHandler>();
+        services.AddScoped<Policies.ListPoliciesHandler>();
+        services.AddScoped<Policies.ListPolicyVersionsHandler>();
+        services.AddScoped<Policies.DiffPolicyHandler>();
+        services.AddScoped<Policies.TestPolicyHandler>();
         return services;
     }
 }

@@ -19,6 +19,7 @@ public abstract class ApiControllerBase : ControllerBase
             ErrorKind.Unprocessable => StatusCodes.Status422UnprocessableEntity,
             ErrorKind.BadGateway => StatusCodes.Status502BadGateway,
             ErrorKind.GatewayTimeout => StatusCodes.Status504GatewayTimeout,
+            ErrorKind.PreconditionFailed => StatusCodes.Status412PreconditionFailed,
             _ => StatusCodes.Status500InternalServerError
         };
         var problem = new ProblemDetails { Status = status, Title = error.Message };
