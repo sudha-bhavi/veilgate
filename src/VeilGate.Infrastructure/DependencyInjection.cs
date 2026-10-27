@@ -26,6 +26,7 @@ public static class DependencyInjection
                 services.AddScoped<IAuditWriter, HashChainAuditWriter>();
         services.AddScoped<IAuditChainVerifier, AuditChainVerifier>();
         services.AddScoped<ISecurityEventWriter, SecurityEventWriter>();
+                services.AddScoped<IPolicyRepository, PolicyRepository>();
         services.AddSingleton<ISecretProtector>(sp =>
         {
             var base64 = sp.GetRequiredService<IConfiguration>()["Security:MfaEncryptionKey"];

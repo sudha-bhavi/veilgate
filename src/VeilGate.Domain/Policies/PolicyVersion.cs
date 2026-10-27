@@ -28,6 +28,8 @@ public sealed class PolicyVersion : TenantEntity
     public DateTimeOffset? PublishedAt { get; private set; }
     public string? ChangeNote { get; private set; }
     public string? RejectReason { get; private set; }
+        /// <summary>False if the text no longer matches the hash taken when it was saved (edited behind the application's back).</summary>
+    public bool IsIntact => Hash(Definition).Equals(DefinitionSha256, StringComparison.Ordinal);
 
     public static Result<PolicyVersion> CreateDraft(Guid tenantId, Guid policyId, int versionNo, string definition, Guid createdBy)
     {
@@ -106,9 +108,8 @@ public sealed class PolicyVersion : TenantEntity
     {
         if (State != PolicyState.PendingApproval) return Result.Failure(NotInState("published", PolicyState.PendingApproval));
         if (approverId == SubmittedBy) return Result.Failure(SelfApproval);
-        if (!Hash(Definition).Equals(DefinitionSha256, StringComparison.Ordinal))
+              if (!IsIntact)
             return Result.Failure(Error.Conflict("policy.tampered", "The policy text changed after it was submitted."));
-
         State = PolicyState.Published;
         ApprovedBy = approverId;
         ApprovedAt = now;

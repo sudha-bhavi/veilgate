@@ -21,6 +21,8 @@ public static class DependencyInjection
         services.AddScoped<Transformation.IOutboundLeakGate, Transformation.OutboundLeakGate>();
         services.AddScoped<Transformation.IRehydrator, Transformation.Rehydrator>();
         services.AddScoped<Gateway.IGatewayPipeline, Gateway.GatewayPipeline>();
+                services.AddSingleton<Policies.BuiltInPolicyResolver>();
+        services.AddScoped<Policies.IPolicyResolver, Policies.StoredPolicyResolver>();
         return services;
     }
 }

@@ -5,6 +5,7 @@ using VeilGate.Domain.Policies;
 using VeilGate.Infrastructure.Persistence;
 using VeilGate.TestSupport;
 using Xunit;
+using VeilGate.Application.Abstractions;
 
 namespace VeilGate.Infrastructure.Tests;
 
@@ -109,5 +110,35 @@ public class PolicyPersistenceTests(PostgresFixture pg)
             $"update policy_versions set submitted_by = {userId}, approved_by = {userId} where id = {draft.Id}");
 
         await act.Should().ThrowAsync<Exception>();
+    }
+
+        [Fact]
+    public async Task The_repository_finds_a_policy_and_its_version_for_its_own_tenant_only()
+    {
+        var (a, userA) = await Seed();
+        var (b, _) = await Seed();
+        var policy = Policy.Create(a, "Via repo", null).Value;
+        var draft = policy.NewDraft("a: 1", userA).Value;
+        await using (var db = AppContext(a))
+        {
+            IPolicyRepository repo = new PolicyRepository(db);
+            repo.AddPolicy(policy);
+            repo.AddVersion(draft);
+            await repo.SaveChangesAsync(default);
+        }
+
+        await using (var db = AppContext(a))
+        {
+            IPolicyRepository repo = new PolicyRepository(db);
+            (await repo.FindAsync(policy.Id, default)).Should().NotBeNull();
+            (await repo.FindVersionAsync(draft.Id, default)).Should().NotBeNull();
+        }
+
+        await using (var db = AppContext(b))
+        {
+            IPolicyRepository repo = new PolicyRepository(db);
+            (await repo.FindAsync(policy.Id, default)).Should().BeNull();
+            (await repo.FindVersionAsync(draft.Id, default)).Should().BeNull();
+        }
     }
 }
