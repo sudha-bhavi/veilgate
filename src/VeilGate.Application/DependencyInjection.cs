@@ -55,6 +55,10 @@ public static class DependencyInjection
         services.AddScoped<LlmProviders.TestLlmProviderHandler>();
         services.AddScoped<LlmProviders.GetLlmProviderHandler>();
         services.AddScoped<LlmProviders.ListLlmProvidersHandler>();
+                services.AddScoped<Evaluation.EvaluationAuditor>();
+        services.AddScoped<Evaluation.CreateSyntheticDatasetHandler>();
+        services.AddScoped<Evaluation.ListDatasetsHandler>();
+        services.AddScoped<Evaluation.GetDatasetHandler>();
         return services;
     }
 }

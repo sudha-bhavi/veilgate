@@ -35,6 +35,8 @@ public static class AuthPolicies
 
     /// <summary>Who may connect language model providers (Backend doc 5.1): Tenant Admins only.</summary>
     public const string LlmProviderAdmin = "LlmProviderAdmin";
+        /// <summary>Who may create datasets and run evaluations: the people who write and approve policies.</summary>
+    public const string EvaluationOperator = "EvaluationOperator";
 
     /// <summary>How fresh the person's last MFA check must be for the most sensitive actions (Backend doc 2.2, RecentMfa).</summary>
     public const int RecentMfaSeconds = 300;
@@ -98,6 +100,11 @@ public static class AuthPolicies
             .RequireAuthenticatedUser()
             .RequireAssertion(ctx => !IsClientToken(ctx.User))
             .RequireRole("TenantAdmin"));
+          
+           options.AddPolicy(EvaluationOperator, p => p
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => !IsClientToken(ctx.User))
+            .RequireRole("TenantAdmin", "SecurityOfficer", "Developer"));
     }
 }
 
