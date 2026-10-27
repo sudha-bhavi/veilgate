@@ -8,6 +8,10 @@ using VeilGate.Domain.Audit;
 using VeilGate.Domain.ApiClients;
 using VeilGate.Domain.LlmProviders;
 using VeilGate.Domain.Policies;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using VeilGate.Domain.Evaluation;
 
 namespace VeilGate.Infrastructure.Persistence;
 
@@ -28,7 +32,10 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<ApiClient> ApiClients => Set<ApiClient>();
     public DbSet<ApiClientSecret> ApiClientSecrets => Set<ApiClientSecret>();
     public DbSet<LlmProvider> LlmProviders => Set<LlmProvider>();
-
+    public DbSet<EvalDataset> EvalDatasets => Set<EvalDataset>();
+    public DbSet<EvalCase> EvalCases => Set<EvalCase>();
+    public DbSet<EvalRun> EvalRuns => Set<EvalRun>();
+    public DbSet<EvalLeak> EvalRunLeaks => Set<EvalLeak>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.HasPostgresExtension("citext");
@@ -417,6 +424,114 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
                 t.HasCheckConstraint("ck_llm_providers_models", "cardinality(models) > 0");
                 t.HasCheckConstraint("ck_llm_providers_dek", "dek_version >= 1");
             });
+        });
+   
+                b.Entity<EvalDataset>(e =>
+        {
+            e.ToTable("eval_datasets");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            e.Property(x => x.CaseCount).HasColumnName("case_count");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            e.ToTable(t => t.HasCheckConstraint("ck_eval_datasets_cases", "case_count >= 1"));
+        });
+
+        // The labels (type and position of each sensitive value) are a small JSON array on the note's row.
+        var spansConverter = new ValueConverter<LabeledSpan[], string>(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => JsonSerializer.Deserialize<LabeledSpan[]>(v, (JsonSerializerOptions?)null) ?? Array.Empty<LabeledSpan>());
+        var spansComparer = new ValueComparer<LabeledSpan[]>(
+            (x, y) => x!.SequenceEqual(y!),
+            v => v.Aggregate(0, (hash, span) => HashCode.Combine(hash, span)),
+            v => v.ToArray());
+
+        b.Entity<EvalCase>(e =>
+        {
+            e.ToTable("eval_cases");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.DatasetId).HasColumnName("dataset_id");
+            e.Property(x => x.Ordinal).HasColumnName("ordinal");
+            e.Property(x => x.Text).HasColumnName("text").IsRequired();
+            e.Property(x => x.Expected).HasColumnName("expected").HasColumnType("jsonb")
+                .HasConversion(spansConverter, spansComparer).IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<EvalDataset>().WithMany().HasForeignKey(x => x.DatasetId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.DatasetId, x.Ordinal }).IsUnique();
+            e.ToTable(t => t.HasCheckConstraint("ck_eval_cases_ordinal", "ordinal >= 0"));
+        });
+
+        b.Entity<EvalRun>(e =>
+        {
+            e.ToTable("eval_runs");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.DatasetId).HasColumnName("dataset_id");
+            e.Property(x => x.PolicyId).HasColumnName("policy_id");
+            e.Property(x => x.PolicyVersion).HasColumnName("policy_version");
+            e.Property(x => x.Mode).HasColumnName("mode").HasMaxLength(16).IsRequired();
+            e.Property(x => x.RecallThreshold).HasColumnName("recall_threshold");
+            e.Property(x => x.RequestedBy).HasColumnName("requested_by");
+            e.Property(x => x.State).HasColumnName("state").HasConversion<string>().HasMaxLength(10).IsRequired();
+            e.Property(x => x.Attempts).HasColumnName("attempts");
+            e.Property(x => x.TotalCases).HasColumnName("total_cases");
+            e.Property(x => x.DoneCases).HasColumnName("done_cases");
+            e.Property(x => x.StartedAt).HasColumnName("started_at");
+            e.Property(x => x.FinishedAt).HasColumnName("finished_at");
+            e.Property(x => x.ErrorCode).HasColumnName("error_code").HasMaxLength(200);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            // The result is empty until the run succeeds, so its columns are nullable.
+            e.OwnsOne(x => x.Summary, o =>
+            {
+                o.Property(p => p.Recall).HasColumnName("recall");
+                o.Property(p => p.Precision).HasColumnName("precision");
+                o.Property(p => p.F1).HasColumnName("f1");
+                o.Property(p => p.LeakRate).HasColumnName("leak_rate");
+                o.Property(p => p.Leaks).HasColumnName("leaks");
+                o.Property(p => p.GatePassed).HasColumnName("gate_passed");
+                o.Property(p => p.PerTypeJson).HasColumnName("per_type").HasColumnType("jsonb");
+            });
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<EvalDataset>().WithMany().HasForeignKey(x => x.DatasetId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.TenantId, x.CreatedAt }).HasDatabaseName("ix_eval_runs_tenant_created");
+            e.HasIndex(x => x.CreatedAt).HasDatabaseName("ix_eval_runs_queue").HasFilter("state = 'Queued'");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_eval_runs_state", "state in ('Queued','Running','Succeeded','Failed')");
+                t.HasCheckConstraint("ck_eval_runs_mode", "mode in ('rules','rules+ner')");
+                t.HasCheckConstraint("ck_eval_runs_threshold", "recall_threshold between 0 and 1");
+                t.HasCheckConstraint("ck_eval_runs_progress", "total_cases >= 1 and done_cases between 0 and total_cases");
+            });
+        });
+
+        b.Entity<EvalLeak>(e =>
+        {
+            e.ToTable("eval_run_leaks");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.RunId).HasColumnName("run_id");
+            e.Property(x => x.CaseId).HasColumnName("case_id");
+            e.Property(x => x.EntityType).HasColumnName("entity_type").HasMaxLength(40).IsRequired();
+            e.Property(x => x.Start).HasColumnName("start_pos");
+            e.Property(x => x.End).HasColumnName("end_pos");
+            e.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(40).IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<EvalRun>().WithMany().HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => x.RunId).HasDatabaseName("ix_eval_run_leaks_run");
         });
     }
 }

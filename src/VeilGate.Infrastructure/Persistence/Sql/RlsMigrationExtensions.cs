@@ -151,4 +151,34 @@ public static class RlsMigrationExtensions
         REVOKE ALL ON FUNCTION auth_find_client_tenant(varchar) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION auth_find_client_tenant(varchar) TO vg_app;
         """);
+
+        /// <summary>
+    /// The evaluation worker has no tenant until it has a run, so it takes work through this one narrow SECURITY DEFINER door.
+    /// One atomic statement marks the oldest queued run as running (SKIP LOCKED: two workers never get the same one) and returns
+    /// only its id and tenant. Runs left "running" by a crashed worker are put back in the queue, or failed once they have used
+    /// all their attempts.
+    /// </summary>
+    public static void CreateEvalClaimFunction(this MigrationBuilder mb) => mb.Sql("""
+        DROP FUNCTION IF EXISTS eval_claim_next_run(int, int);
+        CREATE FUNCTION eval_claim_next_run(p_stale_seconds int, p_max_attempts int)
+        RETURNS TABLE (run_id uuid, run_tenant_id uuid)
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+        BEGIN
+            UPDATE eval_runs r SET state = 'Failed', error_code = 'evaluation.abandoned', finished_at = now()
+            WHERE r.state = 'Running' AND r.attempts >= p_max_attempts
+              AND r.started_at < now() - make_interval(secs => p_stale_seconds);
+
+            UPDATE eval_runs r SET state = 'Queued', done_cases = 0
+            WHERE r.state = 'Running' AND r.attempts < p_max_attempts
+              AND r.started_at < now() - make_interval(secs => p_stale_seconds);
+
+            RETURN QUERY
+            UPDATE eval_runs r SET state = 'Running', attempts = r.attempts + 1, started_at = now(), done_cases = 0
+            WHERE r.id = (SELECT q.id FROM eval_runs q WHERE q.state = 'Queued' ORDER BY q.created_at, q.id FOR UPDATE SKIP LOCKED LIMIT 1)
+            RETURNING r.id, r.tenant_id;
+        END $$;
+        REVOKE ALL ON FUNCTION eval_claim_next_run(int, int) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION eval_claim_next_run(int, int) TO vg_app;
+        """);
 }

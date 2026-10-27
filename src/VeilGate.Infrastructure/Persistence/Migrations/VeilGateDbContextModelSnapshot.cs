@@ -311,6 +311,232 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("VeilGate.Domain.Evaluation.EvalCase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DatasetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dataset_id");
+
+                    b.Property<string>("Expected")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("expected");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer")
+                        .HasColumnName("ordinal");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("DatasetId", "Ordinal")
+                        .IsUnique();
+
+                    b.ToTable("eval_cases", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_eval_cases_ordinal", "ordinal >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Evaluation.EvalDataset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("CaseCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("case_count");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("eval_datasets", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_eval_datasets_cases", "case_count >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Evaluation.EvalLeak", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("case_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("End")
+                        .HasColumnType("integer")
+                        .HasColumnName("end_pos");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<int>("Start")
+                        .HasColumnType("integer")
+                        .HasColumnName("start_pos");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId")
+                        .HasDatabaseName("ix_eval_run_leaks_run");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("eval_run_leaks", (string)null);
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Evaluation.EvalRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DatasetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dataset_id");
+
+                    b.Property<int>("DoneCases")
+                        .HasColumnType("integer")
+                        .HasColumnName("done_cases");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("error_code");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("mode");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_id");
+
+                    b.Property<int>("PolicyVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("policy_version");
+
+                    b.Property<double>("RecallThreshold")
+                        .HasColumnType("double precision")
+                        .HasColumnName("recall_threshold");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("state");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("TotalCases")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_cases");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_eval_runs_queue")
+                        .HasFilter("state = 'Queued'");
+
+                    b.HasIndex("DatasetId");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .HasDatabaseName("ix_eval_runs_tenant_created");
+
+                    b.ToTable("eval_runs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_eval_runs_mode", "mode in ('rules','rules+ner')");
+
+                            t.HasCheckConstraint("ck_eval_runs_progress", "total_cases >= 1 and done_cases between 0 and total_cases");
+
+                            t.HasCheckConstraint("ck_eval_runs_state", "state in ('Queued','Running','Succeeded','Failed')");
+
+                            t.HasCheckConstraint("ck_eval_runs_threshold", "recall_threshold between 0 and 1");
+                        });
+                });
+
             modelBuilder.Entity("VeilGate.Domain.LlmProviders.LlmProvider", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1019,6 +1245,104 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Evaluation.EvalCase", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Evaluation.EvalDataset", null)
+                        .WithMany()
+                        .HasForeignKey("DatasetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Evaluation.EvalDataset", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Evaluation.EvalLeak", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Evaluation.EvalRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Evaluation.EvalRun", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Evaluation.EvalDataset", null)
+                        .WithMany()
+                        .HasForeignKey("DatasetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsOne("VeilGate.Domain.Evaluation.EvalRunResult", "Summary", b1 =>
+                        {
+                            b1.Property<Guid>("EvalRunId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<double>("F1")
+                                .HasColumnType("double precision")
+                                .HasColumnName("f1");
+
+                            b1.Property<bool>("GatePassed")
+                                .HasColumnType("boolean")
+                                .HasColumnName("gate_passed");
+
+                            b1.Property<double>("LeakRate")
+                                .HasColumnType("double precision")
+                                .HasColumnName("leak_rate");
+
+                            b1.Property<int>("Leaks")
+                                .HasColumnType("integer")
+                                .HasColumnName("leaks");
+
+                            b1.Property<string>("PerTypeJson")
+                                .IsRequired()
+                                .HasColumnType("jsonb")
+                                .HasColumnName("per_type");
+
+                            b1.Property<double>("Precision")
+                                .HasColumnType("double precision")
+                                .HasColumnName("precision");
+
+                            b1.Property<double>("Recall")
+                                .HasColumnType("double precision")
+                                .HasColumnName("recall");
+
+                            b1.HasKey("EvalRunId");
+
+                            b1.ToTable("eval_runs");
+
+                            b1.WithOwner()
+                                .HasForeignKey("EvalRunId");
+                        });
+
+                    b.Navigation("Summary");
                 });
 
             modelBuilder.Entity("VeilGate.Domain.LlmProviders.LlmProvider", b =>
