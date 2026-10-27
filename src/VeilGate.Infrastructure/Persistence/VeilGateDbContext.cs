@@ -5,6 +5,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using VeilGate.Domain.Audit;
+using VeilGate.Domain.Policies;
 
 namespace VeilGate.Infrastructure.Persistence;
 
@@ -20,6 +21,8 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<TenantKey> TenantKeys => Set<TenantKey>();
         public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
+        public DbSet<Policy> Policies => Set<Policy>();
+    public DbSet<PolicyVersion> PolicyVersions => Set<PolicyVersion>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -267,6 +270,65 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
             // The security center feed: newest first, filtered by severity.
             e.HasIndex(x => new { x.TenantId, x.Severity, x.OccurredAt }).IsDescending(false, false, true).HasDatabaseName("ix_security_events_feed");
             e.ToTable(t => t.HasCheckConstraint("ck_security_events_severity", "severity in ('Info','Low','Medium','High','Critical')"));
+        });
+   
+                b.Entity<Policy>(e =>
+        {
+            e.ToTable("policies");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(80).IsRequired();
+            e.Property(x => x.Description).HasColumnName("description").HasMaxLength(500);
+            // Plain columns for EF; the real foreign keys are added in the migration as DEFERRABLE (see AddPolicies).
+            e.Property(x => x.CurrentVersionId).HasColumnName("current_version_id");
+            e.Property(x => x.DraftVersionId).HasColumnName("draft_version_id");
+            e.Property(x => x.LastVersionNo).HasColumnName("last_version_no");
+            e.Property(x => x.ArchivedAt).HasColumnName("archived_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Ignore(x => x.IsArchived);
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasAlternateKey(x => new { x.TenantId, x.Id });
+            e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+        });
+
+        b.Entity<PolicyVersion>(e =>
+        {
+            e.ToTable("policy_versions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.PolicyId).HasColumnName("policy_id").IsRequired();
+            e.Property(x => x.VersionNo).HasColumnName("version_no");
+            e.Property(x => x.State).HasColumnName("state").HasConversion<string>().HasMaxLength(20).IsRequired();
+            e.Property(x => x.Definition).HasColumnName("definition").IsRequired();
+            e.Property(x => x.DefinitionSha256).HasColumnName("definition_sha256").HasColumnType("char(64)").IsRequired();
+            e.Property(x => x.CreatedBy).HasColumnName("created_by");
+            e.Property(x => x.SubmittedBy).HasColumnName("submitted_by");
+            e.Property(x => x.ApprovedBy).HasColumnName("approved_by");
+            e.Property(x => x.SubmittedAt).HasColumnName("submitted_at");
+            e.Property(x => x.ApprovedAt).HasColumnName("approved_at");
+            e.Property(x => x.PublishedAt).HasColumnName("published_at");
+            e.Property(x => x.ChangeNote).HasColumnName("change_note").HasMaxLength(500);
+            e.Property(x => x.RejectReason).HasColumnName("reject_reason").HasMaxLength(500);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            // Composite key: a version can only point at a policy of its own tenant.
+            e.HasOne<Policy>().WithMany().HasForeignKey(x => new { x.TenantId, x.PolicyId }).HasPrincipalKey(p => new { p.TenantId, p.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.SubmittedBy).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.ApprovedBy).OnDelete(DeleteBehavior.Restrict);
+            // Target of the deferred pointer constraints from policies.
+            e.HasAlternateKey(x => new { x.TenantId, x.Id });
+            e.HasIndex(x => new { x.PolicyId, x.VersionNo }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.State }).HasDatabaseName("ix_policy_versions_tenant_state");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_policy_versions_state", "state in ('Draft','PendingApproval','Published','Rejected','Archived')");
+                t.HasCheckConstraint("ck_policy_versions_approver", "approved_by is null or approved_by <> submitted_by");
+            });
         });
     }
 }
