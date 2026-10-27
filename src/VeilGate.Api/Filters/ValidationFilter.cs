@@ -18,15 +18,18 @@ public sealed class ValidationFilter : IAsyncActionFilter
         foreach (var argument in context.ActionArguments.Values)
         {
             if (argument is null) continue;
+            // A request type may have more than one validator: the plain rules that need nothing else, and rules that need
+            // to look something up for this tenant (for example, whether any provider serves the requested model). All of them run.
             var validatorType = typeof(IValidator<>).MakeGenericType(argument.GetType());
-            if (context.HttpContext.RequestServices.GetService(validatorType) is not IValidator validator) continue;
-
-            var result = await validator.ValidateAsync(new ValidationContext<object>(argument), context.HttpContext.RequestAborted);
-            foreach (var failure in result.Errors)
+            foreach (var validator in context.HttpContext.RequestServices.GetServices(validatorType).OfType<IValidator>())
             {
-                var path = CamelCase(failure.PropertyName);
-                if (!errors.TryGetValue(path, out var messages)) errors[path] = messages = [];
-                messages.Add(failure.ErrorMessage);
+                var result = await validator.ValidateAsync(new ValidationContext<object>(argument), context.HttpContext.RequestAborted);
+                foreach (var failure in result.Errors)
+                {
+                    var path = CamelCase(failure.PropertyName);
+                    if (!errors.TryGetValue(path, out var messages)) errors[path] = messages = [];
+                    if (!messages.Contains(failure.ErrorMessage)) messages.Add(failure.ErrorMessage);
+                }
             }
         }
 

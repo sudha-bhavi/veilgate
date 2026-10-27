@@ -14,7 +14,7 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 | M1        | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh             | ✅ Done |
 | M2        | Detection engine, policy engine, tokenizer + vault                              | ✅ Done |
 | M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                    | ✅ Done |
-| M4        | Policy workflow, API clients, evaluations                                       | next    |
+| M4        | Policy workflow, API clients, LLM providers, evaluations                        | in progress: all but evaluations done |
 | M5        | React console                                                                   |         |
 | M6        | Kafka outbox, workers, dashboards                                               |         |
 | M7        | Hardening, pen test, deployment                                                 |         |
@@ -129,10 +129,9 @@ POST /api/v1/playground/run            signed-in Developer / Security Officer / 
 ```
 
 - **Tokens.** Gateway endpoints take a *client* token (claims `client_id`, `tid`, `scope`); a person's token is refused there, and a client token is refused on every console endpoint.
-  Nothing issues client tokens yet: `/oauth/token` and stored API clients arrive in M4 (tests mint tokens in-process). The playground works today for a signed-in user.
-- **Policy.** Until policies are stored and approved (M4) every request uses the built-in `hipaa-safe-harbor` template (`PolicyTemplates`).
-- **Model providers** come from the `Llm` configuration section (`Llm__Providers__0__BaseUrl` and so on); in Development `mock-llm` points at the WireMock container on port 8089.
-  Each provider gets its own timeouts, retries (2, with backoff and jitter), circuit breaker and concurrency limit, and the destination address is checked against private and metadata ranges on every connection (set `Llm:AllowPrivateNetworks` only in Development).
+  Client tokens are issued by `POST /oauth/token` for a stored API client (M4d). The playground works for a signed-in user.
+- **Policy.** The policy named in the request, else the API client's default policy, else the built-in `hipaa-safe-harbor` template (`PolicyTemplates`). Stored policies arrived in M4a to M4c.
+- **Model providers** are per tenant and live in the database since M4e (see below). Each provider gets its own timeouts, retries (2, with backoff and jitter), circuit breaker and concurrency limit, and the destination address is checked against private and metadata ranges on every connection (set `Llm:AllowPrivateNetworks` only in Development).
 - **Audit.** Every gateway call appends a row to `audit_events`, a per-tenant hash chain (`HashChainAuditWriter`, verified by `AuditChainVerifier`). The table is append-only: the app role cannot UPDATE or DELETE, and a trigger refuses it for everyone.
   Rows hold counts and ids, never text. Blocked leaks are written to `security_events`.
 - **Apply the new migrations** to your dev database (`AddAuditEvents`, `AddSecurityEvents`, plus `AddVault` from M2):
@@ -142,3 +141,30 @@ dotnet ef database update --project src/VeilGate.Infrastructure --startup-projec
 ```
 
 Not in M3: streaming responses, FHIR, idempotency keys, the `gateway_requests` / `detections` tables and their partitions, signed audit checkpoints, and the ONNX name model (a rule-based name detector stands in).
+
+## M4: stored policies, API clients, LLM providers
+
+```
+/api/v1/policies ...             draft (If-Match), validate, submit, publish, reject, rollback, archive, versions, diff, test
+/oauth/token                     client credentials: client id + secret -> 15-minute gateway token
+/api/v1/api-clients ...          create (secret shown once), update, rotate-secret (grace period), revoke
+/api/v1/llm-providers ...        connect, update, order (failover), test, delete        Tenant Admin only
+```
+
+- **Policy workflow.** The person who submits a policy cannot publish it (`policy.self_approval`). Publishing and rolling back need a second-factor check in the last 5 minutes; a stored policy that no longer matches its hash, or no longer parses, is refused rather than replaced.
+- **API clients.** A secret is shown once and stored as an Argon2id hash; a rotation keeps the old secret working for 1, 24 or 168 hours. Revoking a client stops its tokens on the very next call. A client has its own rate limit, an optional network allowlist and an optional default policy.
+- **LLM providers.** Each tenant connects its own providers (address, API key, models, timeout, failover order). The key is encrypted with the tenant's data key, bound to its provider, and never returned (only its last four characters). Changing a provider's address requires entering the key again. In Development, to use the WireMock container (a Tenant Admin's token in `$TOKEN`):
+
+```bash
+curl -s -X POST http://localhost:5000/api/v1/llm-providers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"mock-llm","baseUrl":"http://localhost:8089","apiKey":"dev-not-a-secret","models":["gpt-4o-mini"]}'
+```
+
+- **The `Llm:Providers` configuration list is gone.** Remove any `Llm__Providers__*` environment variables; they are ignored. Only the shared settings (`AllowPrivateNetworks`, retry and breaker tuning) remain in `Llm`.
+- **Apply the new migrations** to your dev database (`AddPolicies`, `AddApiClients`, `AddLlmProviders`):
+
+```bash
+dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
+```
+
+Not yet in M4: evaluations (datasets, runs, reports), and `/auth/step-up` (so the 5-minute second-factor check cannot yet be renewed without signing in again).

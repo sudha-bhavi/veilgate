@@ -311,6 +311,81 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("VeilGate.Domain.LlmProviders.LlmProvider", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<byte[]>("ApiKeyCipher")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("api_key_enc");
+
+                    b.Property<string>("BaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("base_url");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DekVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("dek_version");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("KeyLast4")
+                        .IsRequired()
+                        .HasColumnType("char(4)")
+                        .HasColumnName("key_last4");
+
+                    b.PrimitiveCollection<string[]>("Models")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("models");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer")
+                        .HasColumnName("priority");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("TimeoutSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("timeout_seconds");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Priority")
+                        .HasDatabaseName("ix_llm_providers_tenant_priority");
+
+                    b.ToTable("llm_providers", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_llm_providers_dek", "dek_version >= 1");
+
+                            t.HasCheckConstraint("ck_llm_providers_models", "cardinality(models) > 0");
+
+                            t.HasCheckConstraint("ck_llm_providers_timeout", "timeout_seconds between 1 and 300");
+                        });
+                });
+
             modelBuilder.Entity("VeilGate.Domain.MfaFactor", b =>
                 {
                     b.Property<Guid>("Id")
@@ -944,6 +1019,15 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.LlmProviders.LlmProvider", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("VeilGate.Domain.MfaFactor", b =>

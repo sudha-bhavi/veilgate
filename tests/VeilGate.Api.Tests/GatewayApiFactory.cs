@@ -46,11 +46,9 @@ public sealed class GatewayApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Security:MfaEncryptionKey", Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
         builder.UseSetting("Security:VaultKek", Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
 
-        // A provider has to be configured so that "gpt-4o-mini" passes the model check. It is never called: the gateway below replaces the client.
+        // Providers live in the database now: a test that sends a chat request seeds one for its tenant (see GatewayApiTests.SeedTenant).
+        // The model call itself is replaced below, so no provider is ever really called.
         builder.UseSetting("Llm:AllowPrivateNetworks", "true");
-        builder.UseSetting("Llm:Providers:0:Name", "test-llm");
-        builder.UseSetting("Llm:Providers:0:BaseUrl", "http://test-llm.invalid");
-        builder.UseSetting("Llm:Providers:0:Models:0", "gpt-4o-mini");
 
         builder.ConfigureTestServices(services => services.AddSingleton<ILlmGateway>(new ScriptedModel(this)));
     }

@@ -11,6 +11,7 @@ using VeilGate.Application.Abstractions;
 using VeilGate.Application.Llm;
 using VeilGate.Domain;
 using VeilGate.Domain.Common;
+using VeilGate.Domain.LlmProviders;
 using VeilGate.Infrastructure.Persistence;
 using VeilGate.Infrastructure.Security;
 using VeilGate.TestSupport;
@@ -50,6 +51,9 @@ public sealed class GatewayApiTests : IDisposable
         var tenant = Tenant.Create($"Gw {Guid.NewGuid():N}"[..16]).Value;
         await using var db = _pg.AdminContext();
         db.Add(tenant);
+        // Chat needs a provider that serves the model. Its key is never decrypted here, because these tests replace the model call itself.
+        db.Add(LlmProvider.Create(Guid.CreateVersion7(), tenant.Id, "test-llm", "http://test-llm.invalid", ["gpt-4o-mini"],
+            new ProtectedApiKey([1], 1, "test")).Value);
         await db.SaveChangesAsync();
         return tenant.Id;
     }

@@ -1,7 +1,7 @@
 using FluentValidation;
 using Microsoft.Extensions.Options;
 using VeilGate.Api.Options;
-using VeilGate.Infrastructure.Llm;
+using VeilGate.Application.Llm;
 
 namespace VeilGate.Api.Gateway;
 
@@ -47,13 +47,10 @@ public sealed class ChatCompletionRequestValidator : AbstractValidator<ChatCompl
 {
     private static readonly string[] Roles = ["system", "user", "assistant"];
 
-    public ChatCompletionRequestValidator(IOptions<LlmOptions> llm)
+    public ChatCompletionRequestValidator()
     {
         RuleFor(x => x.Model).NotEmpty().WithMessage("Model is required")
-            .MaximumLength(80).WithMessage("Maximum 80 characters")
-            // "model must be one of the models of an enabled provider"
-            .Must(model => llm.Value.Providers.Any(p => p.Models.Count == 0 || p.Models.Contains(model, StringComparer.Ordinal)))
-            .WithMessage("No configured provider serves this model");
+            .MaximumLength(80).WithMessage("Maximum 80 characters");
 
         RuleFor(x => x.Messages).NotNull().WithMessage("Messages are required")
             .Must(m => m is { Count: >= 1 and <= 50 }).WithMessage("Between 1 and 50 messages");
@@ -67,6 +64,22 @@ public sealed class ChatCompletionRequestValidator : AbstractValidator<ChatCompl
         RuleFor(x => x.Temperature).InclusiveBetween(0.0, 2.0).WithMessage("Must be between 0 and 2").When(x => x.Temperature is not null);
         RuleFor(x => x.MaxTokens).InclusiveBetween(1, 8192).WithMessage("Must be between 1 and 8192").When(x => x.MaxTokens is not null);
         RuleFor(x => x.Stream).Must(s => s != true).WithMessage("Streaming is not supported yet");
+    }
+}
+
+/// <summary>
+/// "Model must be one of the models of an enabled provider" (Backend doc 4.1), looked up for the tenant of this request. It is a
+/// validator of its own because it needs the database, while the rules above need nothing and stay simple to test. The validation
+/// filter runs both. It stays quiet when the model is missing or too long, since the other validator already says so.
+/// </summary>
+public sealed class ChatModelAvailabilityValidator : AbstractValidator<ChatCompletionRequest>
+{
+    public ChatModelAvailabilityValidator(ILlmProviderCatalog catalog)
+    {
+        RuleFor(x => x.Model)
+            .MustAsync((model, ct) => catalog.ServesModelAsync(model, ct))
+            .WithMessage("No provider serves this model")
+            .When(x => !string.IsNullOrWhiteSpace(x.Model) && x.Model.Length <= 80);
     }
 }
 

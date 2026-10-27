@@ -33,6 +33,9 @@ public static class AuthPolicies
     /// <summary>Who may manage API clients (Backend doc 5.1). A Developer sees only their own; that rule lives in the handlers.</summary>
     public const string ApiClientManager = "ApiClientManager";
 
+    /// <summary>Who may connect language model providers (Backend doc 5.1): Tenant Admins only.</summary>
+    public const string LlmProviderAdmin = "LlmProviderAdmin";
+
     /// <summary>How fresh the person's last MFA check must be for the most sensitive actions (Backend doc 2.2, RecentMfa).</summary>
     public const int RecentMfaSeconds = 300;
 
@@ -90,6 +93,11 @@ public static class AuthPolicies
             .RequireAuthenticatedUser()
             .RequireAssertion(ctx => !IsClientToken(ctx.User))
             .RequireRole("TenantAdmin", "Developer"));
+
+        options.AddPolicy(LlmProviderAdmin, p => p
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => !IsClientToken(ctx.User))
+            .RequireRole("TenantAdmin"));
     }
 }
 

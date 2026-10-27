@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using VeilGate.Domain.Audit;
 using VeilGate.Domain.ApiClients;
+using VeilGate.Domain.LlmProviders;
 using VeilGate.Domain.Policies;
 
 namespace VeilGate.Infrastructure.Persistence;
@@ -26,6 +27,7 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<PolicyVersion> PolicyVersions => Set<PolicyVersion>();
     public DbSet<ApiClient> ApiClients => Set<ApiClient>();
     public DbSet<ApiClientSecret> ApiClientSecrets => Set<ApiClientSecret>();
+    public DbSet<LlmProvider> LlmProviders => Set<LlmProvider>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -385,6 +387,36 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
             e.HasOne<ApiClient>().WithMany().HasForeignKey(x => new { x.TenantId, x.ClientPk })
                 .HasPrincipalKey(c => new { c.TenantId, c.Id }).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.ClientPk).HasDatabaseName("ix_api_client_secrets_client");
+        });
+
+        b.Entity<LlmProvider>(e =>
+        {
+            e.ToTable("llm_providers");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(80).IsRequired();
+            // Database doc 3.2 also says "starts with https://". That check is left out of the database because Development talks to a
+            // local http mock; the application enforces https (and the SSRF rules) when a provider is saved and on every connection.
+            e.Property(x => x.BaseUrl).HasColumnName("base_url").HasMaxLength(300).IsRequired();
+            e.Property(x => x.ApiKeyCipher).HasColumnName("api_key_enc").IsRequired();   // AES-256-GCM: nonce, tag, ciphertext
+            e.Property(x => x.DekVersion).HasColumnName("dek_version");                  // which tenant data key encrypted it
+            e.Property(x => x.KeyLast4).HasColumnName("key_last4").HasColumnType("char(4)").IsRequired();
+            e.Property(x => x.Models).HasColumnName("models").IsRequired();
+            e.Property(x => x.TimeoutSeconds).HasColumnName("timeout_seconds");
+            e.Property(x => x.Priority).HasColumnName("priority");
+            e.Property(x => x.Enabled).HasColumnName("enabled");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Priority }).HasDatabaseName("ix_llm_providers_tenant_priority");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_llm_providers_timeout", "timeout_seconds between 1 and 300");
+                t.HasCheckConstraint("ck_llm_providers_models", "cardinality(models) > 0");
+                t.HasCheckConstraint("ck_llm_providers_dek", "dek_version >= 1");
+            });
         });
     }
 }

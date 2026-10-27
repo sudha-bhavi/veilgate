@@ -21,6 +21,8 @@ public static class DependencyInjection
         services.AddScoped<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
         services.AddScoped<IApiClientRepository, ApiClientRepository>();
+        services.AddScoped<ILlmProviderRepository, LlmProviderRepository>();
+        services.AddScoped<ITenantSecretProtector, TenantSecretProtector>();
         services.AddSingleton<Application.Detection.IDetector, Detection.RegexDetector>();
         services.AddSingleton<Application.Detection.IDetector, Detection.DictionaryDetector>();
         services.AddSingleton<Application.Detection.IDetector, Detection.NameHeuristicDetector>();
