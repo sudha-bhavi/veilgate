@@ -63,5 +63,7 @@ export async function listPolicies(): Promise<PolicyOption[]> {
   const page = await apiFetch<{ items: PolicyOption[] }>(
     "/api/v1/policies?pageSize=50",
   );
-  return page.items.filter((policy) => policy.currentVersion !== null);
+  return page.items.filter(
+    (policy) => policy.currentVersion !== null && policy.status !== "Archived",
+  );
 }
