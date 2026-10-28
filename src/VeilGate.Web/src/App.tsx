@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Route, Routes } from "react-router-dom";
 import { restoreSession } from "./lib/api";
-import { ALL_TENANT_ROLES } from "./auth/roles";
+import { ALL_TENANT_ROLES, PLAYGROUND_ROLES } from "./auth/roles";
 import RequireAuth from "./auth/RequireAuth";
 import AppShell from "./components/AppShell";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -13,6 +13,7 @@ import MfaPage from "./pages/MfaPage";
 import EnrollPage from "./pages/EnrollPage";
 import ForbiddenPage from "./pages/ForbiddenPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import PlaygroundPage from "./pages/PlaygroundPage";
 
 export default function App() {
   // The access token lives in memory, so a reload loses it; the refresh cookie brings the session back.
@@ -43,6 +44,11 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route path="/403" element={<ForbiddenPage />} />
             <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Route>
+        <Route element={<RequireAuth roles={PLAYGROUND_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/playground" element={<PlaygroundPage />} />
           </Route>
         </Route>
       </Routes>
