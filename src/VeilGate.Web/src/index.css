@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/* Dark mode is switched by a "dark" class on <html> (see src/lib/theme.ts). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --fg: #0f172a;
+  --muted: #475569;
+  --line: #e2e8f0;
+}
+
+.dark {
+  --bg: #020617; /* slate-950 */
+  --surface: #0f172a; /* slate-900 */
+  --card: rgb(30 41 59 / 0.6); /* slate-800 at 60% */
+  --fg: #f1f5f9; /* slate-100 */
+  --muted: #94a3b8; /* slate-400 */
+  --line: #1e293b; /* slate-800 */
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: #2563eb; /* blue-600 */
+  --color-brand-hover: #3b82f6; /* blue-500 */
+  --color-accent: #22d3ee; /* cyan-400 */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+}
