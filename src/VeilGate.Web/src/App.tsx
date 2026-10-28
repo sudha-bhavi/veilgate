@@ -14,6 +14,9 @@ import EnrollPage from "./pages/EnrollPage";
 import ForbiddenPage from "./pages/ForbiddenPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import PlaygroundPage from "./pages/PlaygroundPage";
+import { POLICY_AUTHOR_ROLES } from "./auth/policyAccess";
+import PoliciesPage from "./pages/PoliciesPage";
+import NewPolicyPage from "./pages/NewPolicyPage";
 
 export default function App() {
   // The access token lives in memory, so a reload loses it; the refresh cookie brings the session back.
@@ -38,6 +41,12 @@ export default function App() {
               path="/dashboard"
               element={<Placeholder title="Dashboard" />}
             />
+          </Route>
+          <Route path="/policies" element={<PoliciesPage />} />
+        </Route>
+        <Route element={<RequireAuth roles={POLICY_AUTHOR_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/policies/new" element={<NewPolicyPage />} />
           </Route>
         </Route>
         <Route element={<RequireAuth />}>
