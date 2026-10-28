@@ -12,4 +12,7 @@
     <Project Path="tests/VeilGate.Infrastructure.Tests/VeilGate.Infrastructure.Tests.csproj" />
     <Project Path="tests/VeilGate.TestSupport/VeilGate.TestSupport.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/VeilGate.Seeder/VeilGate.Seeder.csproj" />
+  </Folder>
 </Solution>
