@@ -1,6 +1,11 @@
 // Node 25 has its own experimental localStorage that hides the one jsdom provides and does not work without a storage file.
 // Tests get a small in-memory one instead, so they behave the same on every Node version.
 // (Defined directly rather than with vi.stubGlobal, because the theme tests call vi.unstubAllGlobals().)
+import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach } from "vitest";
+
+afterEach(cleanup);
 class MemoryStorage {
   private data = new Map<string, string>();
 

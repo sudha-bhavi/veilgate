@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fakeToken } from "../test/fakeToken";
-import { decodeClaims } from "./claims";
+import { decodeClaims, expiryOf } from "./claims";
 
 describe("decodeClaims", () => {
   it("reads the claims the console needs", () => {
@@ -27,5 +27,17 @@ describe("decodeClaims", () => {
   it("returns null when a required claim is missing", () => {
     expect(decodeClaims(fakeToken({ role: undefined }))).toBeNull();
     expect(decodeClaims(fakeToken({ exp: "soon" }))).toBeNull();
+  });
+  describe("expiryOf", () => {
+    it("reads the expiry even from a token without a role", () => {
+      expect(expiryOf(fakeToken({ role: undefined, exp: 1_800_000_999 }))).toBe(
+        1_800_000_999,
+      );
+    });
+
+    it("returns null when there is none", () => {
+      expect(expiryOf("garbage")).toBeNull();
+      expect(expiryOf(fakeToken({ exp: undefined }))).toBeNull();
+    });
   });
 });
