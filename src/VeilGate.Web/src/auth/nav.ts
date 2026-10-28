@@ -12,7 +12,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { ALL_TENANT_ROLES } from "./roles";
+import { ALL_TENANT_ROLES, PLAYGROUND_ROLES } from "./roles";
 
 export type NavItem = {
   label: string;
@@ -37,7 +37,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: "Playground",
     path: "/playground",
     icon: FlaskConical,
-    roles: ["TenantAdmin", "SecurityOfficer", "Developer"],
+    roles: PLAYGROUND_ROLES,
   },
   {
     label: "Policies",

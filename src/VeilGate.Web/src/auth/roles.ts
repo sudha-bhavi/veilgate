@@ -4,3 +4,8 @@ export const ALL_TENANT_ROLES = [
   "Developer",
   "Auditor",
 ] as const;
+export const PLAYGROUND_ROLES = [
+  "TenantAdmin",
+  "SecurityOfficer",
+  "Developer",
+] as const;
