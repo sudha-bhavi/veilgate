@@ -1,0 +1,93 @@
+import { useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { LogOut, Moon, Sun } from "lucide-react";
+import { navFor } from "../auth/nav";
+import { useSession } from "../auth/useSession";
+import { signOut } from "../lib/api";
+import { currentTheme, setTheme, type Theme } from "../lib/theme";
+import Button from "./Button";
+
+// "TenantAdmin" -> "Tenant Admin"
+const readable = (role: string) => role.replace(/([a-z])([A-Z])/g, "$1 $2");
+
+export default function AppShell() {
+  const session = useSession();
+  const navigate = useNavigate();
+  const [theme, setCurrent] = useState<Theme>(currentTheme);
+  const [signingOut, setSigningOut] = useState(false);
+
+  if (session.status !== "signedIn") return null; // RequireAuth already handles the other cases
+
+  function toggleTheme() {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    setCurrent(next);
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    await signOut();
+    navigate("/login", { replace: true });
+  }
+
+  return (
+    <div className="flex min-h-screen">
+      <aside className="w-56 shrink-0 border-r border-line bg-surface p-3">
+        <p className="px-3 py-2 text-base font-semibold">VeilGate</p>
+        <nav aria-label="Main">
+          <ul className="mt-2 space-y-1">
+            {navFor(session.claims.role).map(({ label, path, icon: Icon }) => (
+              <li key={path}>
+                <NavLink
+                  to={path}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 ${
+                      isActive
+                        ? "bg-brand text-white"
+                        : "text-muted hover:bg-line hover:text-fg"
+                    }`
+                  }
+                >
+                  <Icon className="size-4" aria-hidden="true" />
+                  {label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-end gap-3 border-b border-line bg-surface px-6 py-3">
+          <span className="text-muted">{readable(session.claims.role)}</span>
+          <Button
+            variant="ghost"
+            onClick={toggleTheme}
+            aria-label={
+              theme === "dark"
+                ? "Switch to light theme"
+                : "Switch to dark theme"
+            }
+          >
+            {theme === "dark" ? (
+              <Sun className="size-4" />
+            ) : (
+              <Moon className="size-4" />
+            )}
+          </Button>
+          <Button
+            variant="secondary"
+            loading={signingOut}
+            onClick={handleSignOut}
+          >
+            <LogOut className="size-4" aria-hidden="true" />
+            Sign out
+          </Button>
+        </header>
+        <div className="flex-1">
+          <Outlet />
+        </div>
+      </div>
+    </div>
+  );
+}
