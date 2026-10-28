@@ -20,3 +20,40 @@ export function loginErrorMessage(error: unknown): string {
       return GENERIC;
   }
 }
+
+export type MfaOutcome =
+  | { kind: "wrong_code"; message: string }
+  | { kind: "expired" } // the short-lived token is no longer good: start again at sign-in
+  | { kind: "locked" }
+  | { kind: "failed"; message: string }; // rate limit, network, anything else: stay on the page and say so
+
+/** What a failed code check means for the screen. */
+export function mfaErrorOutcome(error: unknown): MfaOutcome {
+  if (!(error instanceof ApiError)) return { kind: "failed", message: GENERIC };
+  switch (error.status) {
+    case 401:
+      return error.code === "mfa.code_invalid"
+        ? { kind: "wrong_code", message: "Code is incorrect or expired" }
+        : { kind: "expired" };
+    case 423:
+      return { kind: "locked" };
+    case 429:
+      return {
+        kind: "failed",
+        message: error.retryAfter
+          ? `Too many attempts. Wait ${error.retryAfter} seconds`
+          : "Too many attempts. Wait a moment and try again",
+      };
+    case 0:
+      return {
+        kind: "failed",
+        message:
+          "Could not reach the server. Check your connection and try again.",
+      };
+    case 400:
+    case 422:
+      return { kind: "failed", message: error.message };
+    default:
+      return { kind: "failed", message: GENERIC };
+  }
+}

@@ -32,6 +32,7 @@ type FormValues = z.infer<typeof schema>;
 const BANNERS: Record<string, string> = {
   expired: "Your session expired. Sign in again.",
   idle: "You were signed out after a period of inactivity.",
+  locked: "Account temporarily locked. Try again in 15 minutes",
 };
 
 export default function LoginPage() {

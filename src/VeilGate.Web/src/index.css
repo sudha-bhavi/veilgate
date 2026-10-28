@@ -42,3 +42,27 @@ body {
   color: var(--fg);
   font-size: 14px;
 }
+
+/* A wrong code shakes the card; people who ask for reduced motion do not get it. */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+.shake {
+  animation: shake 0.3s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shake {
+    animation: none;
+  }
+}

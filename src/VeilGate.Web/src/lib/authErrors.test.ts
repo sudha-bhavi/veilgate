@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { loginErrorMessage } from "./authErrors";
+import { loginErrorMessage, mfaErrorOutcome } from "./authErrors";
 
 describe("loginErrorMessage", () => {
   it("never says which of email or password was wrong", () => {
@@ -36,5 +36,40 @@ describe("loginErrorMessage", () => {
     expect(loginErrorMessage(new Error("boom"))).toBe(
       "Something went wrong. Try again.",
     );
+  });
+});
+
+describe("mfaErrorOutcome", () => {
+  it("tells a wrong code from an expired sign-in", () => {
+    expect(
+      mfaErrorOutcome(new ApiError(401, "mfa.code_invalid", "x")),
+    ).toEqual({ kind: "wrong_code", message: "Code is incorrect or expired" });
+    expect(
+      mfaErrorOutcome(new ApiError(401, "auth.token_invalid", "x")),
+    ).toEqual({ kind: "expired" });
+    expect(mfaErrorOutcome(new ApiError(401, "error.unknown", "x"))).toEqual({
+      kind: "expired",
+    });
+  });
+
+  it("recognises a locked account", () => {
+    expect(
+      mfaErrorOutcome(new ApiError(423, "auth.account_locked", "x")),
+    ).toEqual({ kind: "locked" });
+  });
+
+  it("keeps the person on the page for a rate limit, a network failure or a malformed code", () => {
+    expect(
+      mfaErrorOutcome(
+        new ApiError(429, "rate_limit.exceeded", "x", undefined, 20),
+      ),
+    ).toEqual({ kind: "failed", message: "Too many attempts. Wait 20 seconds" });
+    expect(
+      mfaErrorOutcome(new ApiError(0, "network.unreachable", "x")).kind,
+    ).toBe("failed");
+    expect(
+      mfaErrorOutcome(new ApiError(422, "validation.failed", "Code is too long")),
+    ).toEqual({ kind: "failed", message: "Code is too long" });
+    expect(mfaErrorOutcome(new Error("boom")).kind).toBe("failed");
   });
 });
