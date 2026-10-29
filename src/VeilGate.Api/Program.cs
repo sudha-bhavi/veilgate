@@ -136,12 +136,15 @@ try
          .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE");
     }));
 
+    builder.Services.Configure<RouteOptions>(o => o.SetParameterPolicy<ConsolePathConstraint>(ConsolePathConstraint.Name));
+
     builder.WebHost.ConfigureKestrel(k => k.AddServerHeader = false);
 
     var app = builder.Build();
 
     app.UseMiddleware<ExceptionHandlingMiddleware>();
     app.UseMiddleware<SecurityHeadersMiddleware>();
+    app.UseStaticFiles();   // the built console in wwwroot (the Docker image puts it there); its files are public, so before authentication
     app.UseSerilogRequestLogging(o => o.GetLevel = (_, _, ex) => ex is null ? Serilog.Events.LogEventLevel.Information : Serilog.Events.LogEventLevel.Error);
     app.UseCors();
     app.UseAuthentication();                       // 1. who is calling? (verifies the token signature, issuer, audience, expiry)
@@ -158,6 +161,11 @@ try
             endpoint.Metadata.Add(new Microsoft.AspNetCore.Authorization.AuthorizeAttribute());
     });
     app.MapHealthChecks("/health/live", new() { Predicate = r => r.Tags.Contains("live") }).AllowAnonymous();
+
+    // The console's pages: any other path without a file extension gets index.html and the browser app takes over.
+    // API paths are left out, so unknown API URLs stay a 404. In development there is no wwwroot (Vite serves the console),
+    // and this simply finds no file.
+    app.MapFallbackToFile($"{{*path:{ConsolePathConstraint.Name}:nonfile}}", "index.html");
 
     app.Run();
 }

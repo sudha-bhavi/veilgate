@@ -1,0 +1,13 @@
+# Keep secrets and local build output out of the Docker build context.
+.env
+.env.*
+!.env.example
+.git
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/*.user
+.vs
+.vscode
+.idea

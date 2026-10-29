@@ -107,6 +107,24 @@ npm run dev
 Open <http://localhost:5173> in Chrome. The first sign-in asks you to set up an authenticator app and shows
 one-time recovery codes. Keep them: they are shown only once.
 
+When you add a model provider, enter its address without `/v1` (for the WireMock container: `http://localhost:8089`).
+VeilGate adds `/v1/chat/completions` itself.
+
+**Check the console under its production security policy**
+
+In production the API serves the built console itself (same origin, which the `SameSite=Strict` refresh cookie
+needs), with a Content-Security-Policy that allows only its own files: no inline scripts, no `eval`, and Monaco's
+worker as a plain file. `npm run dev` does not apply that policy, because hot reload needs inline scripts. To see the
+built console under it, with the API running:
+
+```bash
+cd src/VeilGate.Web
+npm run build && npm run preview     # then open http://localhost:4173 and watch the browser console for CSP errors
+```
+
+The policy lives in `SecurityHeadersMiddleware.ConsolePolicy` and is copied into `vite.config.ts` for the preview.
+The Docker image (`deploy/Dockerfile.api`) builds the console and puts it in the API's `wwwroot`.
+
 **Run the tests**
 
 ```bash
