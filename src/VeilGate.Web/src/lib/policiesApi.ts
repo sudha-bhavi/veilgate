@@ -113,3 +113,88 @@ export const saveDraft = (id: string, yaml: string, etag: string) =>
 /** What a person would edit: the draft if there is one, otherwise the published text. */
 export const editableYaml = (policy: PolicyDetail): string =>
   (policy.draft ?? policy.current)?.yaml ?? "";
+
+export type PolicyIssue = { line: number; column: number; message: string };
+
+export type PolicyValidation = {
+  valid: boolean;
+  errors: PolicyIssue[];
+  warnings: string[];
+};
+
+/** Checks the saved text (the draft, or the published version when there is no draft). */
+export const validatePolicy = (id: string) =>
+  apiFetch<PolicyValidation>(`/api/v1/policies/${id}/validate`, {
+    method: "POST",
+  });
+
+export const submitPolicy = (id: string, summary: string) =>
+  apiFetch(`/api/v1/policies/${id}/submit`, {
+    method: "POST",
+    body: { summary },
+  });
+
+/** Needs a recent MFA check: the server answers 401 auth.insufficient_user_authentication until the person steps up. */
+export const publishPolicy = (id: string) =>
+  apiFetch<{ versionNumber: number }>(`/api/v1/policies/${id}/publish`, {
+    method: "POST",
+  });
+
+export const rejectPolicy = (id: string, reason: string) =>
+  apiFetch(`/api/v1/policies/${id}/reject`, {
+    method: "POST",
+    body: { reason },
+  });
+
+export const archivePolicy = (id: string) =>
+  apiFetch(`/api/v1/policies/${id}/archive`, { method: "POST" });
+
+/** Also needs a recent MFA check. */
+export const rollbackPolicy = (id: string, versionId: string) =>
+  apiFetch<{ versionNumber: number }>(`/api/v1/policies/${id}/rollback`, {
+    method: "POST",
+    body: { versionId },
+  });
+
+export type PolicyVersionItem = {
+  id: string;
+  versionNo: number;
+  state: string;
+  createdBy: string;
+  submittedBy: string | null;
+  approvedBy: string | null;
+  publishedAt: string | null;
+  summary: string | null;
+};
+
+export const listVersions = (id: string) =>
+  apiFetch<Paged<PolicyVersionItem>>(
+    `/api/v1/policies/${id}/versions?page=1&pageSize=100`,
+  );
+
+export const getDiff = (id: string, from: number, to: number) =>
+  apiFetch<{ from: number; to: number; unifiedDiff: string }>(
+    `/api/v1/policies/${id}/diff?from=${from}&to=${to}`,
+  );
+
+export type TestedEntity = {
+  type: string;
+  start: number;
+  end: number;
+  confidence: number;
+  action: string;
+};
+
+export type PolicyTestResult = {
+  entities: TestedEntity[];
+  maskedText: string | null;
+  blocked: boolean;
+  blockedTypes: string[];
+};
+
+/** Runs sample text through the saved draft (or the published version) without storing anything. */
+export const testPolicy = (id: string, text: string) =>
+  apiFetch<PolicyTestResult>(`/api/v1/policies/${id}/test`, {
+    method: "POST",
+    body: { text },
+  });
