@@ -8,7 +8,8 @@ namespace VeilGate.Application.Auth;
 /// <param name="SessionId">The "sid" of the access token being stepped up. The new token keeps it, so it stays the same session.</param>
 /// <param name="TokenVersion">The "ver" claim of that token. Must still match the user's current version.</param>
 /// <param name="Code">The 6-digit code from the authenticator app, or a one-time recovery code.</param>
-public sealed record StepUpCommand(Guid UserId, Guid TenantId, Guid SessionId, int TokenVersion, string Code);
+/// <param name="Ip">The caller's address, for the audit log only.</param>
+public sealed record StepUpCommand(Guid UserId, Guid TenantId, Guid SessionId, int TokenVersion, string Code, string? Ip = null);
 
 public sealed record StepUpResult(string AccessToken);
 
@@ -23,7 +24,7 @@ public sealed class StepUpValidator : AbstractValidator<StepUpCommand>
 /// </summary>
 public sealed class StepUpHandler(
     IUserRepository users, IMfaFactorRepository factors, IRecoveryCodeRepository recoveryCodeStore,
-    ITenantContext tenant, ISecretProtector protector, ITokenService tokens, IClock clock,
+    ITenantContext tenant, ISecretProtector protector, ITokenService tokens, IClock clock, AuthAuditor auditor,
     IValidator<StepUpCommand> validator)
 {
     private const int RecoveryCodeLength = 10;   // letters and digits, not counting the dash
@@ -42,7 +43,11 @@ public sealed class StepUpHandler(
             return InvalidToken;
 
         var now = clock.UtcNow;
-        if (user.IsLocked(now)) return LoginHandler.AccountLocked;
+        if (user.IsLocked(now))
+        {
+            await auditor.DeniedAsync(user, AuthAuditor.StepUp, cmd.Ip, ct);
+            return LoginHandler.AccountLocked;
+        }
 
         var factor = await factors.GetTotpForUserAsync(user.Id, ct);
         if (factor is not { IsConfirmed: true })
@@ -53,7 +58,7 @@ public sealed class StepUpHandler(
         {
             var stored = await recoveryCodeStore.FindByHashAsync(user.Id, RecoveryCodes.Hash(cmd.Code), ct);
             if (stored is null || stored.MarkUsed(now).IsFailure)
-                return await RejectAsync(user, now, ct);
+                return await RejectAsync(user, now, "recovery_code", cmd.Ip, ct);
 
             method = "recovery";
         }
@@ -61,7 +66,7 @@ public sealed class StepUpHandler(
         {
             var secret = protector.Unprotect(factor.ProtectedSecret, StartTotpEnrollmentHandler.ProtectionContext(user.Id));
             var window = Totp.Verify(secret, cmd.Code, now.ToUnixTimeSeconds(), factor.LastUsedCounter);
-            if (window is null) return await RejectAsync(user, now, ct);
+            if (window is null) return await RejectAsync(user, now, "code", cmd.Ip, ct);
 
             var used = factor.RecordUse(window.Value, now);   // remember the window so this code can't be replayed
             if (used.IsFailure) return used.Error;
@@ -70,6 +75,7 @@ public sealed class StepUpHandler(
         }
 
         await factors.SaveChangesAsync(ct);   // one DbContext per request: this also saves a used recovery code
+        await auditor.SucceededAsync(user.TenantId, user.Id, AuthAuditor.StepUp, cmd.Ip, method, ct);
 
         var accessToken = tokens.IssueAccessToken(new AccessTokenClaims(
             user.Id, user.TenantId, user.Role.ToString(),
@@ -82,10 +88,11 @@ public sealed class StepUpHandler(
     }
 
     // A wrong code counts like a wrong password: 5 in a row lock the account for 15 minutes.
-    private async Task<Result<StepUpResult>> RejectAsync(User user, DateTimeOffset now, CancellationToken ct)
+    private async Task<Result<StepUpResult>> RejectAsync(User user, DateTimeOffset now, string reason, string? ip, CancellationToken ct)
     {
         user.RegisterFailedLogin(now);
         await users.SaveChangesAsync(ct);
+        await auditor.FailedAsync(user, AuthAuditor.StepUp, reason, ip, ct);
         return ConfirmTotpHandler.InvalidCode;
     }
 }

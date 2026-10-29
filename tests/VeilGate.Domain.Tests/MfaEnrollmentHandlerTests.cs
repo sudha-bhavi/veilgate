@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using VeilGate.Application.Abstractions;
 using VeilGate.Application.Auth;
@@ -24,7 +25,9 @@ public class MfaEnrollmentHandlerTests
     public MfaEnrollmentHandlerTests() => _clock.UtcNow.Returns(Now);
 
     private StartTotpEnrollmentHandler Start() => new(_users, _factors, _tenant, _protector, _clock);
-    private ConfirmTotpHandler Confirm() => new(_users, _factors, _recovery, _tenant, _protector, _clock, new ConfirmTotpValidator());
+    private ConfirmTotpHandler Confirm() => new(_users, _factors, _recovery, _tenant, _protector, _clock,
+        new AuthAuditor(Substitute.For<IAuditWriter>(), Substitute.For<ISecurityEventWriter>(), _clock, NullLogger<AuthAuditor>.Instance),
+        new ConfirmTotpValidator());
 
     private User GivenActiveUser()
     {

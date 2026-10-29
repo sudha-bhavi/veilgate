@@ -32,7 +32,7 @@ public sealed class StepUpController(StepUpHandler stepUp, IOptions<AuthOptions>
                & int.TryParse(User.FindFirst("ver")?.Value, out var tokenVersion);
         if (!ok) return Fail(InvalidToken);
 
-        var result = await stepUp.HandleAsync(new StepUpCommand(userId, tenantId, sessionId, tokenVersion, request.Code), ct);
+        var result = await stepUp.HandleAsync(new StepUpCommand(userId, tenantId, sessionId, tokenVersion, request.Code, CallerIp), ct);
         if (result.IsFailure) return Fail(result.Error);
 
         return Ok(new { accessToken = result.Value.AccessToken, tokenType = "Bearer", expiresIn = auth.Value.AccessTokenMinutes * 60 });

@@ -1,8 +1,10 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using VeilGate.Application.Abstractions;
 using VeilGate.Application.Auth;
 using VeilGate.Domain;
+using VeilGate.Domain.Audit;
 using VeilGate.Domain.Common;
 using VeilGate.Infrastructure.Persistence;
 using Xunit;
@@ -27,7 +29,16 @@ public class LoginHandlerTests
         _users.IsTenantActiveAsync(Arg.Any<CancellationToken>()).Returns(true);
     }
 
-     private LoginHandler Handler() => new(_users, _factors, _hasher, _tenant, _tokens, _clock, new LoginValidator());
+    private readonly IAuditWriter _audit = Substitute.For<IAuditWriter>();
+    private readonly ISecurityEventWriter _securityEvents = Substitute.For<ISecurityEventWriter>();
+
+    private LoginHandler Handler() => new(_users, _factors, _hasher, _tenant, _tokens, _clock,
+        new AuthAuditor(_audit, _securityEvents, _clock, NullLogger<AuthAuditor>.Instance), new LoginValidator());
+
+    private Task AuditedAsync(string result, string reason) =>
+        _audit.Received(1).WriteAsync(Arg.Is<AuditEvent>(e =>
+            e.Action == AuthAuditor.SignIn && e.Result == result && e.Details["reason"] == reason && e.Ip == "203.0.113.5"),
+            Arg.Any<CancellationToken>());
 
     private User GivenActiveUser()
     {
@@ -67,6 +78,68 @@ public class LoginHandlerTests
         r.Error.Should().Be(LoginHandler.InvalidCredentials);
         u.FailedAttempts.Should().Be(1);
         await _users.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Wrong_password_is_audited_as_a_failure_with_the_address_and_no_password()
+    {
+        GivenActiveUser();
+        _hasher.Verify("bad", "stored-hash").Returns(false);
+
+        await Handler().HandleAsync(new LoginCommand("jordan@acme.test", "bad", "203.0.113.5"));
+
+        await AuditedAsync("failure", "password");
+        await _audit.DidNotReceive().WriteAsync(Arg.Is<AuditEvent>(e => e.Details.Values.Contains("bad")), Arg.Any<CancellationToken>());
+        await _securityEvents.DidNotReceive().WriteAsync(Arg.Any<SecurityEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task The_failure_that_locks_the_account_raises_a_security_event()
+    {
+        var u = GivenActiveUser();
+        for (var i = 0; i < User.MaxFailedAttempts - 1; i++) u.RegisterFailedLogin(Now);
+        _hasher.Verify("bad", "stored-hash").Returns(false);
+
+        await Handler().HandleAsync(new LoginCommand("jordan@acme.test", "bad", "203.0.113.5"));
+
+        u.IsLocked(Now).Should().BeTrue();
+        await _securityEvents.Received(1).WriteAsync(
+            Arg.Is<SecurityEvent>(e => e.Type == "auth.account_locked" && e.UserId == u.Id && e.Severity == Severity.Medium),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_locked_account_is_audited_as_denied_without_a_new_lock_event()
+    {
+        var u = GivenActiveUser();
+        for (var i = 0; i < User.MaxFailedAttempts; i++) u.RegisterFailedLogin(Now);
+
+        await Handler().HandleAsync(new LoginCommand("jordan@acme.test", "anything", "203.0.113.5"));
+
+        await AuditedAsync("denied", "locked");
+        await _securityEvents.DidNotReceive().WriteAsync(Arg.Any<SecurityEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task An_unknown_email_is_not_audited_because_no_tenant_owns_it()
+    {
+        _users.FindLoginCandidateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult<LoginCandidate?>(null));
+
+        await Handler().HandleAsync(new LoginCommand("nobody@acme.test", "pw", "203.0.113.5"));
+
+        await _audit.DidNotReceive().WriteAsync(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task The_password_step_alone_is_not_a_sign_in()
+    {
+        GivenActiveUser();
+        _hasher.Verify("pw", "stored-hash").Returns(true);
+
+        await Handler().HandleAsync(new LoginCommand("jordan@acme.test", "pw", "203.0.113.5"));
+
+        // Recorded once the second factor passes (VerifyMfaHandler), not here.
+        await _audit.DidNotReceive().WriteAsync(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

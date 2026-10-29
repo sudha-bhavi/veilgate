@@ -5,7 +5,8 @@ using VeilGate.Domain.Common;
 
 namespace VeilGate.Application.Auth;
 
-public sealed record ConfirmTotpCommand(Guid UserId, Guid TenantId, string Code);
+/// <param name="Ip">The caller's address, for the audit log only.</param>
+public sealed record ConfirmTotpCommand(Guid UserId, Guid TenantId, string Code, string? Ip = null);
 
 /// <param name="RecoveryCodes">The readable backup codes. They exist in this response only; the database keeps just their hashes.</param>
 public sealed record ConfirmTotpResult(IReadOnlyList<string> RecoveryCodes);
@@ -20,7 +21,7 @@ public sealed class ConfirmTotpValidator : AbstractValidator<ConfirmTotpCommand>
 
 public sealed class ConfirmTotpHandler(
     IUserRepository users, IMfaFactorRepository factors, IRecoveryCodeRepository recoveryCodeStore,
-    ITenantContext tenant, ISecretProtector protector, IClock clock, IValidator<ConfirmTotpCommand> validator)
+    ITenantContext tenant, ISecretProtector protector, IClock clock, AuthAuditor auditor, IValidator<ConfirmTotpCommand> validator)
 {
     public static readonly Error InvalidCode = Error.Unauthorized("mfa.code_invalid", "The code is incorrect or expired.");
 
@@ -45,7 +46,12 @@ public sealed class ConfirmTotpHandler(
         var secret = protector.Unprotect(factor.ProtectedSecret, StartTotpEnrollmentHandler.ProtectionContext(user.Id));
         var now = clock.UtcNow;
         var window = Totp.Verify(secret, cmd.Code, now.ToUnixTimeSeconds());
-        if (window is null) return InvalidCode;
+        if (window is null)
+        {
+            // Not counted toward the lock: during setup the person proves they scanned the code, not who they are.
+            await auditor.FailedAsync(user, AuthAuditor.MfaEnroll, "code", cmd.Ip, ct, counted: false);
+            return InvalidCode;
+        }
 
         var confirmed = factor.Confirm(window.Value, now);
         if (confirmed.IsFailure) return confirmed.Error;
@@ -63,6 +69,7 @@ public sealed class ConfirmTotpHandler(
 
         // One save: the confirmation and the codes are stored together, or not at all.
         await factors.SaveChangesAsync(ct);
+        await auditor.SucceededAsync(user.TenantId, user.Id, AuthAuditor.MfaEnroll, cmd.Ip, "otp", ct);
         return new ConfirmTotpResult(readable);
     }
 }

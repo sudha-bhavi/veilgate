@@ -5,7 +5,8 @@ using VeilGate.Domain.Common;
 
 namespace VeilGate.Application.Auth;
 
-public sealed record LoginCommand(string Email, string Password);
+/// <param name="Ip">The caller's address, for the audit log only.</param>
+public sealed record LoginCommand(string Email, string Password, string? Ip = null);
 
 /// <param name="MfaToken">Short-lived token to present at the MFA step. Not an access token.</param>
 public sealed record LoginResult(bool MfaRequired, bool MfaEnrollmentRequired, string MfaToken);
@@ -25,7 +26,7 @@ public sealed class LoginValidator : AbstractValidator<LoginCommand>
 /// </summary>
 public sealed class LoginHandler(
     IUserRepository users, IMfaFactorRepository factors, IPasswordHasher hasher, ITenantContext tenant,
-    ITokenService tokens, IClock clock, IValidator<LoginCommand> validator)
+    ITokenService tokens, IClock clock, AuthAuditor auditor, IValidator<LoginCommand> validator)
 {
     public static readonly Error InvalidCredentials = Error.Unauthorized("auth.invalid_credentials", "Email or password is incorrect");
     public static readonly Error AccountLocked = Error.Locked("auth.account_locked", "Account temporarily locked. Try again in 15 minutes");
@@ -49,16 +50,22 @@ public sealed class LoginHandler(
         if (user is null || user.Status != UserStatus.Active || !await users.IsTenantActiveAsync(ct))
         {
             hasher.VerifyDummy(cmd.Password);
+            if (user is not null) await auditor.FailedAsync(user, AuthAuditor.SignIn, "account_inactive", cmd.Ip, ct, counted: false);
             return InvalidCredentials;
         }
 
         var now = clock.UtcNow;
-        if (user.IsLocked(now)) return AccountLocked;
+        if (user.IsLocked(now))
+        {
+            await auditor.DeniedAsync(user, AuthAuditor.SignIn, cmd.Ip, ct);
+            return AccountLocked;
+        }
 
         if (user.PasswordHash is null || !hasher.Verify(cmd.Password, user.PasswordHash))
         {
             user.RegisterFailedLogin(now);
             await users.SaveChangesAsync(ct);
+            await auditor.FailedAsync(user, AuthAuditor.SignIn, "password", cmd.Ip, ct);
             return InvalidCredentials;
         }
 
