@@ -8,6 +8,7 @@ import PolicyStatusBadge from "../components/PolicyStatusBadge";
 import PolicyTestPanel from "../components/PolicyTestPanel";
 import PolicyVersionsPanel from "../components/PolicyVersionsPanel";
 import PolicyWorkflowBar from "../components/PolicyWorkflowBar";
+import Tabs from "../components/Tabs";
 import { ApiError } from "../lib/api";
 import { describeApiError } from "../lib/apiErrorText";
 import {
@@ -167,30 +168,13 @@ export default function PolicyDetailPage() {
         </p>
       )}
 
-      <div
-        role="tablist"
-        aria-label="Policy sections"
-        className="flex gap-1 border-b border-line"
-      >
-        {TABS.map(({ id: tabId, label }) => (
-          <button
-            key={tabId}
-            type="button"
-            role="tab"
-            id={`tab-${tabId}`}
-            aria-selected={tab === tabId}
-            aria-controls="policy-panel"
-            onClick={() => setTab(tabId)}
-            className={`-mb-px border-b-2 px-4 py-2 font-medium ${
-              tab === tabId
-                ? "border-accent text-fg"
-                : "border-transparent text-muted hover:text-fg"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Policy sections"
+        tabs={TABS}
+        active={tab}
+        onChange={setTab}
+        panelId="policy-panel"
+      />
 
       {tab === "versions" && (
         <div role="tabpanel" id="policy-panel" aria-labelledby="tab-versions">

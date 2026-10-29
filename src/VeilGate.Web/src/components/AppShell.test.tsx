@@ -55,4 +55,12 @@ describe("AppShell", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("lets keyboard users skip the navigation", () => {
+    renderShell("Developer");
+    expect(
+      screen.getByRole("link", { name: "Skip to main content" }),
+    ).toHaveAttribute("href", "#main-content");
+    expect(document.getElementById("main-content")).not.toBeNull();
+  });
 });

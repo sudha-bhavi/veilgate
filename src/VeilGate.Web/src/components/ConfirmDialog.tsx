@@ -1,9 +1,11 @@
 import {
   useId,
+  useRef,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { useFocusTrap } from "../lib/useFocusTrap";
 import Button from "./Button";
 
 type Props = {
@@ -30,6 +32,8 @@ export default function ConfirmDialog({
   onCancel,
 }: Props) {
   const titleId = useId();
+  const dialogRef = useRef<HTMLFormElement>(null);
+  useFocusTrap(dialogRef);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -46,6 +50,7 @@ export default function ConfirmDialog({
       onKeyDown={onKeyDown}
     >
       <form
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
