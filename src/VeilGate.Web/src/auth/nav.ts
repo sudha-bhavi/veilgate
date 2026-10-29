@@ -87,3 +87,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
 
 export const navFor = (role: string): NavItem[] =>
   NAV_ITEMS.filter((item) => item.roles.includes(role));
+
+/** Who may open a sidebar page. An unknown path gives nobody, so a typo can never open a page to everyone. */
+export const rolesForPath = (path: string): readonly string[] =>
+  NAV_ITEMS.find((item) => item.path === path)?.roles ?? [];
