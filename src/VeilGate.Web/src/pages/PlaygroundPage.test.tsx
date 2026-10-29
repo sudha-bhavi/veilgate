@@ -95,6 +95,31 @@ describe("PlaygroundPage", () => {
     expect(screen.getByRole("button", { name: "Run" })).toBeEnabled();
   });
 
+  it("counts what a chat protected, from the per-type counts the server sends", async () => {
+    stubApi(() =>
+      json(200, {
+        requestId: "req-2",
+        entitiesProtected: { PERSON: 1, PHONE: 2 },
+        maskedText: "Call [[PERSON_AB12]] at [PHONE]",
+        llmResponseMasked: "Calling [[PERSON_AB12]]",
+        restoredResponse: "Calling Jane",
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByLabelText("Chat"));
+    await user.type(screen.getByLabelText("Text"), "Call Jane at 555-201-8890");
+    await user.type(screen.getByLabelText("Model"), "model-1");
+    await user.click(screen.getByRole("button", { name: "Run" }));
+
+    expect(
+      await screen.findByText(
+        "3 items protected (PERSON 1, PHONE 2) before the model saw your text.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows the server's message when the run is refused", async () => {
     stubApi(() =>
       json(422, {

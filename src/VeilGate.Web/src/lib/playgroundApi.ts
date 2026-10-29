@@ -15,11 +15,20 @@ export type DeidentifyResult = {
 
 export type ChatResult = {
   requestId: string;
-  entitiesProtected: number;
+  entitiesProtected: Record<string, number>; // how many of each type, e.g. { PERSON: 1, PHONE: 2 }
   maskedText: string; // what the model was given
   llmResponseMasked: string; // what the model answered
   restoredResponse: string; // what the caller gets back
 };
+
+/** "3 items protected (PERSON 1, PHONE 2)" from the per-type counts a chat run returns. */
+export function describeProtected(counts: Record<string, number>): string {
+  const entries = Object.entries(counts);
+  const total = entries.reduce((sum, [, count]) => sum + count, 0);
+  if (total === 0) return "Nothing needed protecting";
+  const items = total === 1 ? "1 item" : `${total} items`;
+  return `${items} protected (${entries.map(([type, count]) => `${type} ${count}`).join(", ")})`;
+}
 
 export type PlaygroundOutcome =
   | { mode: "detect"; data: DetectResult }

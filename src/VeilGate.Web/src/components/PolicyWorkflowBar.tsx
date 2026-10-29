@@ -39,6 +39,7 @@ export default function PolicyWorkflowBar({ policy, role, dirty }: Props) {
     setFailure(null);
     showToast(message, "success");
     void queryClient.invalidateQueries({ queryKey: ["policy", policy.id] });
+    void queryClient.invalidateQueries({ queryKey: ["policy-versions", policy.id] }); // every step changes a version's state
     void queryClient.invalidateQueries({ queryKey: ["policies"] });
   }
 

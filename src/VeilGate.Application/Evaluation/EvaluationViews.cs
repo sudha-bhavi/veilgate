@@ -1,4 +1,5 @@
 using System.Text.Json;
+using VeilGate.Application.Abstractions;
 using VeilGate.Domain.Evaluation;
 
 namespace VeilGate.Application.Evaluation;
@@ -30,7 +31,11 @@ public sealed record EvaluationReport(
     Guid RunId, string DatasetName, int Notes, string PolicyName, int PolicyVersion, string Mode, double RecallThreshold,
     DateTimeOffset? FinishedAt, EvaluationResultView Result, IReadOnlyList<LeakDetailView> Leaks, int LeaksShown);
 
-public sealed record LeakDetailView(int? Note, string Type, int Start, int End, string Reason, string? Value);
+/// <summary>One leak as the console and the report show it: the note's number instead of the internal case id.</summary>
+public sealed record LeakDetailView(int? Note, string Type, int Start, int End, string Reason, string? Value)
+{
+    public static LeakDetailView From(LeakDetail l) => new(l.CaseOrdinal, l.EntityType, l.Start, l.End, l.Reason, l.Value);
+}
 
 public sealed record MetricChange(double A, double B, double Delta);
 

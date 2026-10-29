@@ -54,6 +54,7 @@ export default function PolicyDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ["policy", id] });
       setEdited(null);
       validate.reset();
+      void queryClient.invalidateQueries({ queryKey: ["policy-versions", id] }); // saving a published policy starts a new draft version
       void queryClient.invalidateQueries({ queryKey: ["policies"] });
       showToast("Draft saved.", "success");
     },

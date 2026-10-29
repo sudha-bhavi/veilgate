@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { PlaygroundOutcome } from "../lib/playgroundApi";
+import { describeProtected, type PlaygroundOutcome } from "../lib/playgroundApi";
 import HighlightedText from "./HighlightedText";
 
 function Stage({
@@ -117,7 +117,7 @@ export default function PlaygroundResult({
         <>
           <Stage
             title="Sent to the model"
-            hint={`${outcome.data.entitiesProtected} item(s) protected before the model saw your text.`}
+            hint={`${describeProtected(outcome.data.entitiesProtected)} before the model saw your text.`}
           >
             <TextBlock text={outcome.data.maskedText} />
           </Stage>

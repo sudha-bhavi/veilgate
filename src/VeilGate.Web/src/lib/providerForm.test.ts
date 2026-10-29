@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LlmProvider } from "./providersApi";
 import {
   bodyFromProvider,
+  describeTestFailure,
   emptyProviderForm,
   formFromProvider,
   providerFormErrors,
@@ -11,7 +12,7 @@ import {
 const provider = (over: Partial<LlmProvider> = {}): LlmProvider => ({
   id: "pr1",
   name: "Main",
-  baseUrl: "https://api.example.com/v1",
+  baseUrl: "https://api.example.com",
   keyLast4: "abcd",
   models: ["model-a", "model-b"],
   timeoutSeconds: 60,
@@ -24,7 +25,7 @@ const provider = (over: Partial<LlmProvider> = {}): LlmProvider => ({
 const valid = () => ({
   ...emptyProviderForm(),
   name: "Main",
-  baseUrl: "https://api.example.com/v1",
+  baseUrl: "https://api.example.com",
   apiKey: "key-12345678",
   models: "model-a",
 });
@@ -33,7 +34,7 @@ describe("providerFormErrors", () => {
   it("asks for everything on an empty form", () => {
     expect(providerFormErrors(emptyProviderForm(), "create")).toEqual({
       name: "Name is required.",
-      baseUrl: "Enter a full address such as https://api.example.com/v1.",
+      baseUrl: "Address is required.",
       apiKey: "API key is required.",
       models: "At least one model is required.",
     });
@@ -47,6 +48,21 @@ describe("providerFormErrors", () => {
     for (const baseUrl of ["https://user:pw@example.com", "https://example.com/?key=1", "ftp://example.com"]) {
       expect(providerFormErrors({ ...valid(), baseUrl }, "create").baseUrl).toBeDefined();
     }
+  });
+
+  it("refuses an address with the scheme twice, which the URL parser would accept", () => {
+    expect(providerFormErrors({ ...valid(), baseUrl: "https://http://localhost:8089" }, "create").baseUrl).toBe(
+      "The address starts with http twice. Enter it once.",
+    );
+  });
+
+  it("refuses /v1 at the end, because the gateway adds it", () => {
+    for (const baseUrl of ["https://api.example.com/v1", "https://api.example.com/v1/", "http://localhost:8089/V1"]) {
+      expect(providerFormErrors({ ...valid(), baseUrl }, "create").baseUrl).toBe(
+        "Leave out /v1 at the end: VeilGate adds /v1/chat/completions itself.",
+      );
+    }
+    expect(providerFormErrors({ ...valid(), baseUrl: "https://gateway.test/openai" }, "create")).toEqual({});
   });
 
   it("lets the key stay blank when editing, but checks it when given", () => {
@@ -71,12 +87,23 @@ describe("toProviderBody", () => {
     });
     expect(body).toEqual({
       name: "Main",
-      baseUrl: "https://api.example.com/v1",
+      baseUrl: "https://api.example.com",
       apiKey: undefined,
       models: ["model-a", "model-b"],
       timeoutSeconds: undefined,
       enabled: true,
     });
+  });
+});
+
+describe("describeTestFailure", () => {
+  it("puts a known category into words and keeps the category", () => {
+    expect(describeTestFailure("timeout")).toBe("Failed: the provider took too long to answer (timeout)");
+  });
+
+  it("does not invent a meaning for a category it does not know", () => {
+    expect(describeTestFailure("something_new")).toBe("Failed: unknown error (something_new)");
+    expect(describeTestFailure(null)).toBe("Failed: unknown error");
   });
 });
 
@@ -90,7 +117,7 @@ describe("formFromProvider and bodyFromProvider", () => {
   it("re-saves a provider with one change and no key", () => {
     expect(bodyFromProvider(provider(), { enabled: false })).toEqual({
       name: "Main",
-      baseUrl: "https://api.example.com/v1",
+      baseUrl: "https://api.example.com",
       models: ["model-a", "model-b"],
       timeoutSeconds: 60,
       enabled: false,

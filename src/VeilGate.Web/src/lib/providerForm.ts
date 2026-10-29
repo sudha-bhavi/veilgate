@@ -27,7 +27,7 @@ export type ProviderFormErrors = {
 
 export const emptyProviderForm = (): ProviderFormState => ({
   name: "",
-  baseUrl: "https://",
+  baseUrl: "", // a prefilled "https://" turned a pasted address into https://https//...
   apiKey: "",
   models: "",
   timeoutSeconds: "",
@@ -47,17 +47,25 @@ function addressProblem(value: string): string | null {
   const text = value.trim();
   if (!text) return "Address is required.";
   if (text.length > 300) return "Maximum 300 characters.";
+  // new URL() accepts "https://https://host" as a host called "https", so catch the doubled scheme first.
+  if (/^https?:\/\/https?:/i.test(text)) {
+    return "The address starts with http twice. Enter it once.";
+  }
   let url: URL;
   try {
     url = new URL(text);
   } catch {
-    return "Enter a full address such as https://api.example.com/v1.";
+    return "Enter a full address such as https://api.example.com.";
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     return "Use an http or https address.";
   }
   if (url.username || url.password || url.search || url.hash) {
     return "Leave out credentials, a query and a fragment.";
+  }
+  // The gateway adds /v1/chat/completions itself (ProviderCaller.cs), so ".../v1" would call /v1/v1/... and get a 404.
+  if (/\/v1\/*$/i.test(url.pathname)) {
+    return "Leave out /v1 at the end: VeilGate adds /v1/chat/completions itself.";
   }
   return null;
 }
@@ -110,6 +118,22 @@ export function toProviderBody(form: ProviderFormState): ProviderBody {
     enabled: form.enabled,
   };
 }
+
+// The fixed words LlmProviderTester.cs reports. The provider's own error text never reaches the console.
+const TEST_FAILURES: Record<string, string> = {
+  timeout: "the provider took too long to answer",
+  unreachable: "the address could not be reached",
+  circuit_open: "paused after repeated failures, try again in a minute",
+  overloaded: "too many calls are already waiting for it",
+  http_error: "the provider refused the call (check the address, key and model)",
+  invalid_response: "the answer was not an OpenAI-compatible reply",
+};
+
+/** A failed connection test in words, keeping the category for anyone who needs to look it up. */
+export const describeTestFailure = (category: string | null): string =>
+  category
+    ? `Failed: ${TEST_FAILURES[category] ?? "unknown error"} (${category})`
+    : "Failed: unknown error";
 
 /** The body that re-saves a provider as it is, with one thing changed. No key, so the stored key stays. */
 export function bodyFromProvider(

@@ -23,6 +23,15 @@ export function applyInput(
   return { boxes: next, focus: Math.min(position, CODE_LENGTH - 1) };
 }
 
+/**
+ * What a box's change event typed. Normally one key, so only the newest digit counts (the box may still hold the old one).
+ * Authenticator and password-manager autofill put the whole code into one box at once: then every digit counts.
+ */
+export function typedIntoBox(value: string): string {
+  const digits = digitsOnly(value);
+  return digits.length >= CODE_LENGTH ? digits : digits.slice(-1);
+}
+
 /** Backspace: clears this box, or, if it is already empty, the one before it. */
 export function removeAt(boxes: string[], index: number): Result {
   const next = [...boxes];

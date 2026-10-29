@@ -6,7 +6,7 @@ import Button from "../components/Button";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ProviderForm from "../components/ProviderForm";
 import { describeApiError } from "../lib/apiErrorText";
-import { bodyFromProvider } from "../lib/providerForm";
+import { bodyFromProvider, describeTestFailure } from "../lib/providerForm";
 import {
   createProvider,
   deleteProvider,
@@ -242,7 +242,7 @@ export default function ProvidersPage() {
                         <span className="text-success">Working · {result.latencyMs} ms</span>
                       ) : (
                         <span className="text-danger">
-                          Failed: {result.errorCategory ?? "unknown error"}
+                          {describeTestFailure(result.errorCategory)}
                         </span>
                       )}
                     </span>

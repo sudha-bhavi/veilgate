@@ -59,13 +59,15 @@ export default function ProviderForm({ provider, loading, error, onSubmit, onCan
       <div>
         <TextField
           label="Address"
+          placeholder="https://api.example.com"
           value={form.baseUrl}
           error={shown.baseUrl}
           onChange={(event) => set("baseUrl", event.target.value)}
         />
         <p className="mt-1 text-xs text-muted">
-          The base address of an OpenAI-compatible service. It is checked again
-          every time the gateway connects.
+          The base address of an OpenAI-compatible service, without /v1 (VeilGate
+          adds /v1/chat/completions). It is checked again every time the gateway
+          connects.
         </p>
       </div>
 

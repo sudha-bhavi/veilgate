@@ -9,7 +9,7 @@ import ProvidersPage from "./ProvidersPage";
 const provider = (over: Record<string, unknown> = {}) => ({
   id: "pr1",
   name: "Main",
-  baseUrl: "https://api.example.com/v1",
+  baseUrl: "https://api.example.com",
   keyLast4: "abcd",
   models: ["model-a"],
   timeoutSeconds: 60,
@@ -83,14 +83,18 @@ describe("ProvidersPage", () => {
   });
 
   it("reports a failed connection test by category", async () => {
-    fakeServer(two, () => json({ ok: false, latencyMs: 0, errorCategory: "auth" }));
+    fakeServer(two, () => json({ ok: false, latencyMs: 0, errorCategory: "http_error" }));
     const user = userEvent.setup();
     renderPage(<ProvidersPage />, options);
 
     const [first] = await screen.findAllByRole("button", { name: "Test connection" });
     await user.click(first);
 
-    expect(await screen.findByText("Failed: auth")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Failed: the provider refused the call (check the address, key and model) (http_error)",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("adds a provider with the key only in the request", async () => {
@@ -100,9 +104,7 @@ describe("ProvidersPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Add provider" }));
     await user.type(screen.getByLabelText("Name"), "Main");
-    const address = screen.getByLabelText("Address");
-    await user.clear(address);
-    await user.type(address, "https://api.example.com/v1");
+    await user.type(screen.getByLabelText("Address"), "https://api.example.com");
     await user.type(screen.getByLabelText("API key"), "key-12345678");
     await user.type(screen.getByLabelText("Models"), "model-a");
     await user.click(screen.getAllByRole("button", { name: "Add provider" })[0]);
@@ -110,7 +112,7 @@ describe("ProvidersPage", () => {
     await waitFor(() => expect(callsTo(fetchMock, "/api/v1/llm-providers", "POST")).toHaveLength(1));
     expect(bodyOf(callsTo(fetchMock, "/api/v1/llm-providers", "POST")[0][1])).toMatchObject({
       name: "Main",
-      baseUrl: "https://api.example.com/v1",
+      baseUrl: "https://api.example.com",
       apiKey: "key-12345678",
       models: ["model-a"],
     });

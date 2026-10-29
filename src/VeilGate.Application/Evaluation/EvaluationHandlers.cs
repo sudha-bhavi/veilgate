@@ -59,13 +59,15 @@ public sealed class GetEvaluationHandler(IEvaluationRepository evaluations)
 
 public sealed class GetEvaluationLeaksHandler(IEvaluationRepository evaluations)
 {
-    public async Task<Result<IReadOnlyList<LeakDetail>>> HandleAsync(Guid id, int page, int pageSize, CancellationToken ct = default)
+    // Same shape as the report's leaks (LeakDetailView), which is what the console reads; the raw LeakDetail left Note and Type empty there.
+    public async Task<Result<IReadOnlyList<LeakDetailView>>> HandleAsync(Guid id, int page, int pageSize, CancellationToken ct = default)
     {
         if (await evaluations.FindRunAsync(id, ct) is null) return Error.NotFound();
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 200);
         var leaks = await evaluations.ListLeakDetailsAsync(id, (page - 1) * pageSize, pageSize, ct);
-        return Result.Success(leaks);   // an interface type cannot convert implicitly to Result<T>, so it is wrapped explicitly
+        IReadOnlyList<LeakDetailView> views = leaks.Select(LeakDetailView.From).ToList();
+        return Result.Success(views);   // an interface type cannot convert implicitly to Result<T>, so it is wrapped explicitly
     }
 }
 
@@ -87,7 +89,7 @@ public sealed class GetEvaluationReportHandler(IEvaluationRepository evaluations
         return new EvaluationReport(
             run.Id, dataset?.Name ?? "(unknown)", run.TotalCases, policy?.Name ?? "(unknown)", run.PolicyVersion, run.Mode, run.RecallThreshold,
             run.FinishedAt, EvaluationResultView.From(run.Summary),
-            leaks.Select(l => new LeakDetailView(l.CaseOrdinal, l.EntityType, l.Start, l.End, l.Reason, l.Value)).ToList(), leaks.Count);
+            leaks.Select(LeakDetailView.From).ToList(), leaks.Count);
     }
 }
 

@@ -228,8 +228,10 @@ public sealed class EvaluationsApiTests : IDisposable
         var leaks = await Json(await Send(HttpMethod.Get, $"/api/v1/evaluations/{rules}/leaks", s.Token));
         var items = leaks.GetProperty("items").EnumerateArray().ToList();
         items.Should().NotBeEmpty();
-        items.Should().Contain(i => i.GetProperty("entityType").GetString() == "PERSON" && i.GetProperty("reason").GetString() == "not_detected");
-        items.Select(i => i.GetProperty("caseOrdinal").GetInt32()).Should().BeInAscendingOrder();
+        // The same names the report and the console use (LeakDetailView), not the internal LeakDetail.
+        items.Should().Contain(i => i.GetProperty("type").GetString() == "PERSON" && i.GetProperty("reason").GetString() == "not_detected");
+        items.Select(i => i.GetProperty("note").GetInt32()).Should().BeInAscendingOrder();
+        items.Where(i => i.TryGetProperty("caseId", out _)).Should().BeEmpty();   // Where takes a delegate; OnlyContain's expression tree cannot hold "out _"
         items.Should().OnlyContain(i => !string.IsNullOrEmpty(i.GetProperty("value").GetString()));
 
         var firstPage = await Json(await Send(HttpMethod.Get, $"/api/v1/evaluations/{rules}/leaks?pageSize=1", s.Token));

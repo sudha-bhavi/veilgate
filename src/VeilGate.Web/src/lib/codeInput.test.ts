@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyInput, digitsOnly, removeAt } from "./codeInput";
+import { applyInput, digitsOnly, removeAt, typedIntoBox } from "./codeInput";
 import { formatCountdown } from "./format";
 
 const empty = ["", "", "", "", "", ""];
@@ -77,6 +77,25 @@ describe("removeAt", () => {
 
   it("stops at the first box", () => {
     expect(removeAt(empty, 0)).toEqual({ boxes: empty, focus: 0 });
+  });
+});
+
+describe("typedIntoBox", () => {
+  it("keeps only the newest digit of a normal key press", () => {
+    expect(typedIntoBox("47")).toBe("7");
+    expect(typedIntoBox("a")).toBe("");
+  });
+
+  it("keeps the whole code when autofill puts it into one box", () => {
+    expect(typedIntoBox("099066")).toBe("099066");
+    expect(applyInput(empty, 0, typedIntoBox("099066")).boxes).toEqual([
+      "0",
+      "9",
+      "9",
+      "0",
+      "6",
+      "6",
+    ]);
   });
 });
 

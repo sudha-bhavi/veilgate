@@ -8,8 +8,8 @@ import {
 import {
   applyInput,
   CODE_LENGTH,
-  digitsOnly,
   removeAt,
+  typedIntoBox,
 } from "../lib/codeInput";
 
 type Props = {
@@ -80,9 +80,7 @@ export default function CodeInput({ label, disabled, onComplete }: Props) {
           aria-label={`${label} digit ${index + 1}`}
           className="size-11 rounded-lg border border-line bg-surface text-center text-lg text-fg outline-none focus-visible:border-accent disabled:opacity-50"
           onChange={(event) =>
-            update(
-              applyInput(boxes, index, digitsOnly(event.target.value).slice(-1)),
-            )
+            update(applyInput(boxes, index, typedIntoBox(event.target.value)))
           }
           onKeyDown={(event) => onKeyDown(event, index)}
           onPaste={(event) => onPaste(event, index)}
