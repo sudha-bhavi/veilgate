@@ -9,6 +9,7 @@ import {
   PROVIDER_ROLES,
 } from "./auth/roles";
 import RequireAuth from "./auth/RequireAuth";
+import { rolesForPath } from "./auth/nav";
 import AppShell from "./components/AppShell";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ToastHost from "./components/ToastHost";
@@ -31,6 +32,8 @@ import ProvidersPage from "./pages/ProvidersPage";
 import EvaluationsPage from "./pages/EvaluationsPage";
 import EvaluationDetailPage from "./pages/EvaluationDetailPage";
 import EvaluationComparePage from "./pages/EvaluationComparePage";
+import ComingSoonPage from "./pages/ComingSoonPage";
+import { COMING_SOON } from "./pages/comingSoon";
 
 export default function App() {
   // The access token lives in memory, so a reload loses it; the refresh cookie brings the session back.
@@ -53,10 +56,6 @@ export default function App() {
         {/* Every signed-in tenant role */}
         <Route element={<RequireAuth roles={ALL_TENANT_ROLES} />}>
           <Route element={<AppShell />}>
-            <Route
-              path="/dashboard"
-              element={<Placeholder title="Dashboard" />}
-            />
             <Route path="/policies" element={<PoliciesPage />} />
             <Route path="/policies/:id" element={<PolicyDetailPage />} />
           </Route>
@@ -102,6 +101,18 @@ export default function App() {
             />
           </Route>
         </Route>
+
+        {/* Sections that are planned but not built yet. Who may open each comes from the sidebar list. */}
+        {COMING_SOON.map(({ path, ...page }) => (
+          <Route
+            key={path}
+            element={<RequireAuth roles={rolesForPath(path)} />}
+          >
+            <Route element={<AppShell />}>
+              <Route path={path} element={<ComingSoonPage {...page} />} />
+            </Route>
+          </Route>
+        ))}
 
         {/* Any signed-in person: the 403 page and anything that does not exist */}
         <Route element={<RequireAuth />}>
