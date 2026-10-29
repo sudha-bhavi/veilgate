@@ -408,4 +408,32 @@ public sealed class MfaApiTests : IDisposable
         (await PostWithCookieAsync(Refresh, null)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         (await PostWithCookieAsync(Logout, null)).StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
+
+    // ---------- the audit log ----------
+
+    [Fact]
+    public async Task Setup_sign_in_a_wrong_password_and_sign_out_land_in_the_audit_log_in_a_valid_chain()
+    {
+        var (user, refreshToken, _) = await SignedInAsync();
+        (await _client.PostAsJsonAsync("/api/v1/auth/login", new { email = user.Email, password = "not the password" }))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await PostWithCookieAsync(Logout, refreshToken)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        await using var db = _pg.AdminContext();
+        var events = await db.AuditEvents.AsNoTracking().Where(e => e.TenantId == user.TenantId).OrderBy(e => e.Seq).ToListAsync();
+
+        events.Select(e => (e.Action, e.Result)).Should().Equal(
+            ("auth.mfa_enroll", "success"),
+            ("auth.login", "success"),
+            ("auth.login", "failure"),
+            ("auth.logout", "success"));
+        events.Should().OnlyContain(e => e.ActorType == "user" && e.ActorId == user.Id);
+        events[1].Details["method"].Should().Be("otp");
+        events[2].Details["reason"].Should().Be("password");
+        events.SelectMany(e => e.Details.Values).Should().NotContain(v => v.Contains("not the password") || v.Contains(Password));
+
+        var check = await new VeilGate.Infrastructure.Persistence.AuditChainVerifier(db).VerifyAsync(user.TenantId);
+        check.Ok.Should().BeTrue();
+        check.Verified.Should().Be(4);
+    }
 }

@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using VeilGate.Application.Abstractions;
 using VeilGate.Application.Auth;
 using VeilGate.Domain;
+using VeilGate.Domain.Audit;
 using VeilGate.Infrastructure.Persistence;
 using VeilGate.Infrastructure.Security;
 using Xunit;
@@ -32,8 +34,12 @@ public class VerifyMfaHandlerTests
                .Returns("access-token");
     }
 
-      private VerifyMfaHandler Handler() =>
-        new(_users, _factors, _recovery, _sessions, _tenant, _protector, _tokens, _clock, new VerifyMfaValidator());
+    private readonly IAuditWriter _audit = Substitute.For<IAuditWriter>();
+
+    private VerifyMfaHandler Handler() =>
+        new(_users, _factors, _recovery, _sessions, _tenant, _protector, _tokens, _clock,
+            new AuthAuditor(_audit, Substitute.For<ISecurityEventWriter>(), _clock, NullLogger<AuthAuditor>.Instance),
+            new VerifyMfaValidator());
 
     // An active user with a confirmed MFA factor, as it would sit in the database.
     private (User user, MfaFactor factor, byte[] secret) GivenEnrolledUser(bool confirmed = true)
@@ -55,6 +61,22 @@ public class VerifyMfaHandlerTests
 
     private static string CodeNow(byte[] secret) => Totp.Compute(secret, Now.ToUnixTimeSeconds());
     private static string StaleCode(byte[] secret) => Totp.Compute(secret, Now.ToUnixTimeSeconds() - 3600);
+
+    [Fact]
+    public async Task A_completed_sign_in_and_a_wrong_code_are_both_audited()
+    {
+        var (user, _, secret) = GivenEnrolledUser();
+
+        await Handler().HandleAsync(Cmd(user, StaleCode(secret)));
+        await Handler().HandleAsync(Cmd(user, CodeNow(secret)));
+
+        await _audit.Received(1).WriteAsync(Arg.Is<AuditEvent>(e =>
+            e.Action == AuthAuditor.SignIn && e.Result == "failure" && e.Details["reason"] == "code" && e.ActorId == user.Id),
+            Arg.Any<CancellationToken>());
+        await _audit.Received(1).WriteAsync(Arg.Is<AuditEvent>(e =>
+            e.Action == AuthAuditor.SignIn && e.Result == "success" && e.Details["method"] == "otp"),
+            Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task A_valid_code_returns_an_access_token_with_the_right_claims()

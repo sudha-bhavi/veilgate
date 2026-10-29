@@ -3,10 +3,14 @@ using VeilGate.Domain;
 
 namespace VeilGate.Application.Auth;
 
-public sealed record LogoutCommand(string? RefreshToken);
+/// <param name="Ip">The caller's address, for the audit log only.</param>
+public sealed record LogoutCommand(string? RefreshToken, string? Ip = null);
 
-/// <summary>Ends the session behind this refresh token. Always "succeeds": logging out twice, or with no session, is fine.</summary>
-public sealed class LogoutHandler(ISessionRepository sessions, ITenantContext tenant, IClock clock)
+/// <summary>
+/// Ends the session behind this refresh token. Always "succeeds": logging out twice, or with no session, is fine.
+/// Only a sign-out that really ended a session is audited.
+/// </summary>
+public sealed class LogoutHandler(ISessionRepository sessions, ITenantContext tenant, IClock clock, AuthAuditor auditor)
 {
     public async Task HandleAsync(LogoutCommand cmd, CancellationToken ct = default)
     {
@@ -22,5 +26,6 @@ public sealed class LogoutHandler(ISessionRepository sessions, ITenantContext te
 
         session.Revoke("logout", clock.UtcNow);
         await sessions.SaveChangesAsync(ct);
+        await auditor.SucceededAsync(tenant.TenantId, session.UserId, AuthAuditor.SignOut, cmd.Ip, null, ct);
     }
 }

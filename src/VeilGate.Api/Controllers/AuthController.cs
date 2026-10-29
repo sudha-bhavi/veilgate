@@ -20,7 +20,7 @@ public sealed class AuthController(
     [EnableRateLimiting("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
-        var result = await login.HandleAsync(new LoginCommand(request.Email, request.Password), ct);
+        var result = await login.HandleAsync(new LoginCommand(request.Email, request.Password, CallerIp), ct);
         if (result.IsFailure) return Fail(result.Error);
         var r = result.Value;
         return Ok(new { mfaRequired = r.MfaRequired, mfaEnrollmentRequired = r.MfaEnrollmentRequired, mfaToken = r.MfaToken });
@@ -44,7 +44,7 @@ public sealed class AuthController(
     [HttpPost("logout")]
     public async Task<IActionResult> Logout(CancellationToken ct)
     {
-        await logout.HandleAsync(new LogoutCommand(RefreshCookie.Read(Request)), ct);
+        await logout.HandleAsync(new LogoutCommand(RefreshCookie.Read(Request), CallerIp), ct);
         RefreshCookie.Clear(Response);
         return NoContent();
     }
