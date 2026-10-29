@@ -35,6 +35,9 @@ public static class AuthPolicies
 
     /// <summary>Who may connect language model providers (Backend doc 5.1): Tenant Admins only.</summary>
     public const string LlmProviderAdmin = "LlmProviderAdmin";
+
+    /// <summary>Who may read the audit log and check its hash chain: Tenant Admins, Security Officers and Auditors. Nobody may change it.</summary>
+    public const string AuditReader = "AuditReader";
         /// <summary>Who may create datasets and run evaluations: the people who write and approve policies.</summary>
     public const string EvaluationOperator = "EvaluationOperator";
 
@@ -100,6 +103,11 @@ public static class AuthPolicies
             .RequireAuthenticatedUser()
             .RequireAssertion(ctx => !IsClientToken(ctx.User))
             .RequireRole("TenantAdmin"));
+
+        options.AddPolicy(AuditReader, p => p
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => !IsClientToken(ctx.User))
+            .RequireRole("TenantAdmin", "SecurityOfficer", "Auditor"));
           
            options.AddPolicy(EvaluationOperator, p => p
             .RequireAuthenticatedUser()

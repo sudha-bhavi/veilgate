@@ -1,9 +1,10 @@
 import { useEffect } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { restoreSession } from "./lib/api";
 import {
   ALL_TENANT_ROLES,
   API_CLIENT_ROLES,
+  AUDIT_ROLES,
   EVALUATION_ROLES,
   PLAYGROUND_ROLES,
   PROVIDER_ROLES,
@@ -32,6 +33,7 @@ import ProvidersPage from "./pages/ProvidersPage";
 import EvaluationsPage from "./pages/EvaluationsPage";
 import EvaluationDetailPage from "./pages/EvaluationDetailPage";
 import EvaluationComparePage from "./pages/EvaluationComparePage";
+import AuditLogPage from "./pages/AuditLogPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import { COMING_SOON } from "./pages/comingSoon";
 
@@ -44,7 +46,10 @@ export default function App() {
   return (
     <ErrorBoundary>
       <Routes>
-        <Route path="/" element={<StatusPage />} />
+        {/* The home address opens the console: the dashboard, or the sign-in page first when signed out */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* A quick "can the console reach the API?" check, open without signing in */}
+        <Route path="/status" element={<StatusPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/mfa" element={<MfaPage />} />
         <Route path="/mfa/enroll" element={<EnrollPage />} />
@@ -99,6 +104,12 @@ export default function App() {
               path="/evaluations/:id"
               element={<EvaluationDetailPage />}
             />
+          </Route>
+        </Route>
+
+        <Route element={<RequireAuth roles={AUDIT_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/audit" element={<AuditLogPage />} />
           </Route>
         </Route>
 

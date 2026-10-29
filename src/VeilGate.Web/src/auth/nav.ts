@@ -15,6 +15,7 @@ import {
 import {
   ALL_TENANT_ROLES,
   API_CLIENT_ROLES,
+  AUDIT_ROLES,
   EVALUATION_ROLES,
   PLAYGROUND_ROLES,
   PROVIDER_ROLES,
@@ -78,7 +79,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: "Audit log",
     path: "/audit",
     icon: ScrollText,
-    roles: ["TenantAdmin", "SecurityOfficer", "Auditor"],
+    roles: AUDIT_ROLES,
   },
   { label: "Users", path: "/users", icon: Users, roles: ADMIN },
   { label: "Security", path: "/security", icon: Lock, roles: OVERSIGHT },

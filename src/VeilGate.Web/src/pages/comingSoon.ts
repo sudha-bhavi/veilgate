@@ -29,16 +29,6 @@ export const COMING_SOON: readonly ComingSoon[] = [
     ],
   },
   {
-    path: "/audit",
-    title: "Audit log",
-    summary: "A read-only record of who did what, and when.",
-    planned: [
-      "Sign-ins, policy changes, secret rotations and revocations",
-      "The person, the time and the address each action came from",
-      "Filters, and tamper evidence for the log itself",
-    ],
-  },
-  {
     path: "/users",
     title: "Users",
     summary: "The people in your organisation and what they may do.",
