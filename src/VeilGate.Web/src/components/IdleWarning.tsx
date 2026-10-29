@@ -1,9 +1,15 @@
+import { useRef } from "react";
+import { useFocusTrap } from "../lib/useFocusTrap";
 import Button from "./Button";
 
 export default function IdleWarning({ onStay }: { onStay: () => void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4">
       <div
+        ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="idle-title"

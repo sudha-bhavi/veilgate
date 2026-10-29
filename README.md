@@ -1,40 +1,117 @@
 # VeilGate
 
 A multi-tenant gateway that finds protected health information (PHI) in text, replaces it according to a policy,
-sends only the sanitized text to an LLM, and restores values in the answer. All data in this project is synthetic.
-Not certified for real PHI.
+sends only the sanitized text to an LLM, and restores the values in the answer.
+
+> **All data in this project is synthetic. VeilGate is not certified for real PHI.**
+
+```
+your app ──► VeilGate ──► LLM provider
+              │
+              ├─ finds PHI: names, dates, ID numbers, phone numbers ...
+              ├─ replaces it using a policy: redact, mask, tokenize, or shift dates
+              ├─ checks the model's answer for anything that leaked
+              └─ puts the original values back in the answer
+```
 
 Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test cases, Deployment) describe everything below.
 
+## Highlights
+
+- **Policies as YAML**, with a real approval workflow: draft, validate, submit, approve by a *different* person, publish.
+  Every version is kept, can be compared (diff), and can be rolled back.
+- **OpenAI-compatible endpoint.** Existing clients only change their base URL. API clients have scoped credentials,
+  rate limits, network allowlists, and secret rotation with a grace period.
+- **Tenant isolation in the database.** PostgreSQL row-level security on every tenant table.
+- **Reversible protection.** Values are encrypted with AES-256-GCM under a per-tenant data key and swapped for tokens,
+  so the answer can be restored.
+- **Careful sign-in.** Argon2id passwords, ES256 tokens with a public key set, authenticator-app MFA with recovery codes,
+  and a fresh second-factor check ("step-up") before sensitive actions such as publishing a policy or creating a client.
+- **Tamper-evident audit.** An append-only, hash-chained log of counts and ids, never text.
+- **Measured quality.** Evaluations run a policy over synthetic notes with known answers and report recall, precision,
+  F1 and leaks per type, and can compare two runs.
+- **A React console** for all of it: playground, policies with a YAML editor, API clients, providers, evaluations.
+
+## Tech stack
+
+| Area     | What                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------- |
+| Backend  | .NET 10, ASP.NET Core, FluentValidation, Polly (retries and circuit breaker for LLM calls)     |
+| Data     | PostgreSQL 16 with row-level security, EF Core migrations                                      |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query, React Router, Monaco editor        |
+| Testing  | xUnit (backend), Vitest and Testing Library (frontend), throwaway Postgres for database tests |
+| Local    | Docker Compose: Postgres, Redis, Redpanda (Kafka), MailHog, WireMock                           |
+
 ## Status
 
-| Milestone | Scope                                                                           | State   |
-| --------- | ------------------------------------------------------------------------------- | ------- |
-| M0        | Solution skeleton, Docker Compose, Postgres roles, health endpoint, first tests | ✅ Done |
-| M1        | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh             | ✅ Done |
-| M2        | Detection engine, policy engine, tokenizer + vault                              | ✅ Done |
-| M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                    | ✅ Done |
-| M4        | Policy workflow, API clients, LLM providers, evaluations                        | ✅ Done |
-| M5        | React console                                                                   |         |
-| M6        | Kafka outbox, workers, dashboards                                               |         |
-| M7        | Hardening, pen test, deployment                                                 |         |
+| Milestone | Scope                                                                                         | State          |
+| --------- | --------------------------------------------------------------------------------------------- | -------------- |
+| M0        | Solution skeleton, Docker Compose, Postgres roles, health endpoint, first tests               | ✅ Done        |
+| M1        | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh                           | ✅ Done        |
+| M2        | Detection engine, policy engine, tokenizer + vault                                            | ✅ Done        |
+| M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                                  | ✅ Done        |
+| M4        | Policy workflow, API clients, LLM providers, evaluations, step-up check                       | ✅ Done        |
+| M5        | React console: sign-in, playground, policies, API clients, providers, evaluations             | 🚧 Mostly done |
+| M6        | Kafka outbox, workers, dashboards                                                             |                |
+| M7        | Hardening, pen test, deployment                                                               |                |
 
-## Prerequisites
+In the console, Dashboard, Requests, Audit log, Users, Security and Settings are marked "Not built yet": their
+server side is not written. Everything else works end to end.
 
-.NET 10 SDK, Docker Desktop, Git, Node 22 (later, for the frontend).
+## Run it locally
 
-## First run
+You need the .NET 10 SDK, Docker Desktop, Git and Node 22 or newer.
+
+**1. Set up the database and tools**
 
 ```bash
 ./setup.sh                      # Windows: .\setup.ps1
-cp .env.example .env            # Windows: copy .env.example .env  (then edit the passwords)
+cp .env.example .env            # Windows: copy .env.example .env  (then edit the passwords inside)
 docker compose -f deploy/docker-compose.yml --env-file .env up -d
-dotnet build
-dotnet test
-dotnet run --project src/VeilGate.Api
-# in another terminal:
-curl http://localhost:5000/health/live      # port is printed in the console
-curl http://localhost:5000/api/v1/system/info
+dotnet tool restore
+dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
+```
+
+**2. Start the API** (on port 5080, because macOS uses port 5000 for AirPlay)
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 dotnet run --project src/VeilGate.Api
+curl http://localhost:5080/health/live          # in another terminal
+```
+
+**3. Start the worker** (it runs evaluations)
+
+```bash
+DOTNET_ENVIRONMENT=Development dotnet run --project src/VeilGate.Workers
+```
+
+**4. Create the demo organisation and people.** Use the `vg_migrator` password from your `.env`, and choose your own
+password of at least 12 characters for the demo people:
+
+```bash
+dotnet run --project tools/VeilGate.Seeder -- --connection "Host=localhost;Database=veilgate;Username=vg_migrator;Password=<PG_MIGRATOR_PASSWORD from .env>" --password "<a password you choose>"
+```
+
+This creates the tenant "Acme Health" and one person per role: `admin@acme.test` (Tenant Admin),
+`security@acme.test` (Security Officer), `dev@acme.test` (Developer) and `auditor@acme.test` (Auditor).
+The seeder only works on a database on your own machine.
+
+**5. Start the console**
+
+```bash
+cd src/VeilGate.Web
+npm install
+npm run dev
+```
+
+Open <http://localhost:5173> in Chrome. The first sign-in asks you to set up an authenticator app and shows
+one-time recovery codes. Keep them: they are shown only once.
+
+**Run the tests**
+
+```bash
+dotnet test                                  # backend
+cd src/VeilGate.Web && npm test              # frontend
 ```
 
 If you change the passwords in `.env`, put the same `vg_app` password in
@@ -52,11 +129,18 @@ src/VeilGate.Application     use cases, interfaces, validators
 src/VeilGate.Infrastructure  EF Core, tenant interceptor, external services
 src/VeilGate.Api             controllers, middleware, composition root
 src/VeilGate.Workers         background services (outbox, purger, evaluations)
+src/VeilGate.Web             the React console
+tools/VeilGate.Seeder        creates the demo organisation and people (local databases only)
 tests/                       xUnit tests
 deploy/                      Docker Compose, Dockerfiles, Postgres init, WireMock
 ```
 
-## M1a: database schema and row-level security
+## Development notes by milestone
+
+These are the build notes, kept as written. Their `curl` examples use port 5000, the .NET default; on macOS use 5080
+as above.
+
+### M1a: database schema and row-level security
 
 ```bash
 dotnet tool restore                      # installs dotnet-ef from .config/dotnet-tools.json
@@ -83,7 +167,7 @@ dotnet ef database update --project src/VeilGate.Infrastructure --startup-projec
 dotnet test
 ```
 
-## M1b: login, Argon2id, JWT (ES256), JWKS
+### M1b: login, Argon2id, JWT (ES256), JWKS
 
 New project `tests/VeilGate.TestSupport` (shared throwaway-Postgres helper). Register it, restore and test:
 
@@ -93,7 +177,7 @@ dotnet build
 dotnet test                     # first run downloads a NuGet package or two
 ```
 
-No new migration is needed. To try it by hand, create a user in the dev database (see `docs/` for the seed script when it lands), then:
+No new migration is needed. To try it by hand, create a user in the dev database (the seeder above does this), then:
 
 ```bash
 ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/VeilGate.Api
@@ -104,7 +188,7 @@ curl -s -X POST http://localhost:5000/api/v1/auth/login -H 'Content-Type: applic
 In Development the API creates a temporary signing key at startup. In any other environment you must set `Auth__Keys__0__Kid` and `Auth__Keys__0__PrivateKeyPem`
 (generate with `openssl ecparam -name prime256v1 -genkey -noout`).
 
-## M2: detection, policy, transformation, vault
+### M2: detection, policy, transformation, vault
 
 Pure logic first, then the encrypted vault. No HTTP endpoints yet (those are M3).
 
@@ -118,7 +202,7 @@ text -> TextNormalizer -> DetectionPipeline (RegexDetector, DictionaryDetector) 
 - New setting `Security:VaultKek` (32 random bytes, base64). `appsettings.Development.json` has a development-only value. In any other environment set it yourself: `openssl rand -base64 32` (production will use Key Vault).
 - Token format is `[[TYPE_XXXX]]` (underscore), as in Backend doc 6.2 and Database doc 3.4.
 
-## M3: the gateway
+### M3: the gateway
 
 ```
 POST /api/v1/gateway/detect            scope gateway:detect       find entities, positions only
@@ -142,13 +226,14 @@ dotnet ef database update --project src/VeilGate.Infrastructure --startup-projec
 
 Not in M3: streaming responses, FHIR, idempotency keys, the `gateway_requests` / `detections` tables and their partitions, signed audit checkpoints, and the ONNX name model (a rule-based name detector stands in).
 
-## M4: stored policies, API clients, LLM providers
+### M4: stored policies, API clients, LLM providers
 
 ```
 /api/v1/policies ...             draft (If-Match), validate, submit, publish, reject, rollback, archive, versions, diff, test
 /oauth/token                     client credentials: client id + secret -> 15-minute gateway token
 /api/v1/api-clients ...          create (secret shown once), update, rotate-secret (grace period), revoke
 /api/v1/llm-providers ...        connect, update, order (failover), test, delete        Tenant Admin only
+/api/v1/auth/step-up             renew the 5-minute second-factor check without signing in again
 ```
 
 - **Policy workflow.** The person who submits a policy cannot publish it (`policy.self_approval`). Publishing and rolling back need a second-factor check in the last 5 minutes; a stored policy that no longer matches its hash, or no longer parses, is refused rather than replaced.
@@ -167,7 +252,7 @@ curl -s -X POST http://localhost:5000/api/v1/llm-providers -H "Authorization: Be
 dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
 ```
 
-## M4f: evaluations
+### M4f: evaluations
 
 ```
 /api/v1/datasets ...             create a synthetic dataset (invented notes with known answers), list, read
@@ -184,4 +269,12 @@ dotnet ef database update --project src/VeilGate.Infrastructure --startup-projec
 dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
 ```
 
-Not yet in M4: `/auth/step-up` (so the 5-minute second-factor check cannot yet be renewed without signing in again).
+### M5: the console
+
+The React console lives in `src/VeilGate.Web`. Its dev server proxies `/api` and `/oauth` to the API on port 5080
+(`vite.config.ts`), so the browser only ever talks to one address and the HttpOnly refresh cookie behaves as it will in production.
+
+- The access token is kept in memory only; a reload brings the session back through the refresh cookie.
+- Menu items and pages follow the server's role rules, but the server checks every request itself.
+- Idle sign-out after 15 minutes, with a warning one minute before.
+- Dialogs trap keyboard focus, tabs work with the arrow keys, and there is a "skip to main content" link.

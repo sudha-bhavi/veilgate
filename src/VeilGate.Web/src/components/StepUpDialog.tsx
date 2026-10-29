@@ -1,7 +1,13 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import {
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import { useMutation } from "@tanstack/react-query";
 import { stepUp } from "../auth/stepUp";
 import { describeApiError } from "../lib/apiErrorText";
+import { useFocusTrap } from "../lib/useFocusTrap";
 import Button from "./Button";
 
 export default function StepUpDialog({
@@ -13,6 +19,8 @@ export default function StepUpDialog({
 }) {
   const [code, setCode] = useState("");
   const confirm = useMutation({ mutationFn: stepUp, onSuccess: onConfirmed });
+  const dialogRef = useRef<HTMLFormElement>(null);
+  useFocusTrap(dialogRef);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -29,6 +37,7 @@ export default function StepUpDialog({
       onKeyDown={onKeyDown}
     >
       <form
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="stepup-title"

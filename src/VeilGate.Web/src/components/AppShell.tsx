@@ -42,6 +42,12 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-brand focus:px-4 focus:py-2 focus:font-medium focus:text-white"
+      >
+        Skip to main content
+      </a>
       <aside className="w-56 shrink-0 border-r border-line bg-surface p-3">
         <p className="px-3 py-2 text-base font-semibold">VeilGate</p>
         <nav aria-label="Main">
@@ -94,7 +100,7 @@ export default function AppShell() {
             Sign out
           </Button>
         </header>
-        <div className="flex-1">
+        <div id="main-content" tabIndex={-1} className="flex-1 outline-none">
           <Outlet />
         </div>
       </div>
