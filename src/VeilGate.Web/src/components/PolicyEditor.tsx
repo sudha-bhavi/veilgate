@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import Editor, { loader } from "@monaco-editor/react";
+import { useEffect, useRef, useState } from "react";
+import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/editor/editor.api";
 import "monaco-editor/editor/editor.main";
 import editorWorker from "monaco-editor/editor/editor.worker?worker";
+import type { PolicyIssue } from "../lib/policiesApi";
 
 // Use the copy of Monaco bundled with the app instead of downloading it from a public CDN.
 self.MonacoEnvironment = { getWorker: () => new editorWorker() };
@@ -25,14 +26,54 @@ function useIsDark(): boolean {
   return dark;
 }
 
+type Handle = {
+  editor: Parameters<OnMount>[0];
+  monaco: Parameters<OnMount>[1];
+};
+
 type Props = {
   value: string;
   onChange: (value: string) => void;
   readOnly: boolean;
+  issues?: readonly PolicyIssue[];
 };
 
-export default function PolicyEditor({ value, onChange, readOnly }: Props) {
+const NO_ISSUES: readonly PolicyIssue[] = [];
+
+export default function PolicyEditor({
+  value,
+  onChange,
+  readOnly,
+  issues = NO_ISSUES,
+}: Props) {
   const dark = useIsDark();
+  const handle = useRef<Handle | null>(null);
+  const [ready, setReady] = useState(false);
+
+  // Mark each problem on its line. An empty list clears the marks.
+  useEffect(() => {
+    const current = handle.current;
+    const model = current?.editor.getModel();
+    if (!current || !model) return;
+    const lines = model.getLineCount();
+    current.monaco.editor.setModelMarkers(
+      model,
+      "veilgate",
+      issues.map((issue) => {
+        const line = Math.min(Math.max(issue.line, 1), lines);
+        const last = model.getLineMaxColumn(line);
+        return {
+          severity: current.monaco.MarkerSeverity.Error,
+          message: issue.message,
+          startLineNumber: line,
+          startColumn: Math.min(Math.max(issue.column, 1), last),
+          endLineNumber: line,
+          endColumn: last,
+        };
+      }),
+    );
+  }, [issues, ready]);
+
   return (
     <div className="overflow-hidden rounded-xl border border-line">
       <Editor
@@ -41,6 +82,10 @@ export default function PolicyEditor({ value, onChange, readOnly }: Props) {
         theme={dark ? "vs-dark" : "vs"}
         value={value}
         onChange={(next) => onChange(next ?? "")}
+        onMount={(editor, monacoInstance) => {
+          handle.current = { editor, monaco: monacoInstance };
+          setReady(true);
+        }}
         options={{
           readOnly,
           minimap: { enabled: false },

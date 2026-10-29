@@ -25,6 +25,9 @@ vi.mock("../components/PolicyEditor", async () => {
   };
 });
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status });
+
 const detail = (over: Record<string, unknown> = {}) => ({
   id: "p1",
   name: "Strict",
@@ -44,17 +47,22 @@ const detail = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function stubApi(
-  onPut: () => Response = () =>
-    new Response(JSON.stringify({ etag: '"def"', versionNo: 2 }), {
-      status: 200,
-    }),
-) {
+type Handlers = { put?: () => Response; validate?: () => Response };
+
+function stubApi(handlers: Handlers = {}) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-    void url;
-    return init?.method === "PUT"
-      ? onPut()
-      : new Response(JSON.stringify(detail()), { status: 200 });
+    if (init?.method === "PUT") {
+      return (
+        handlers.put ?? (() => json({ etag: '"def"', versionNo: 2 }))
+      )();
+    }
+    if (url.endsWith("/validate")) {
+      return (
+        handlers.validate ??
+        (() => json({ valid: true, errors: [], warnings: [] }))
+      )();
+    }
+    return json(detail());
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -128,18 +136,16 @@ describe("PolicyDetailPage", () => {
   });
 
   it("offers a reload when someone else changed the policy first", async () => {
-    stubApi(
-      () =>
-        new Response(
-          JSON.stringify({
+    stubApi({
+      put: () =>
+        json(
+          {
             title: "The policy was changed by someone else.",
             code: "policy.etag_mismatch",
-          }),
-          {
-            status: 412,
           },
+          412,
         ),
-    );
+    });
     const user = userEvent.setup();
     renderPage("SecurityOfficer");
 
@@ -152,5 +158,49 @@ describe("PolicyDetailPage", () => {
     expect(
       screen.getByRole("button", { name: "Discard my changes and reload" }),
     ).toBeInTheDocument();
+  });
+
+  it("lists each problem with its line and column", async () => {
+    stubApi({
+      validate: () =>
+        json({
+          valid: false,
+          errors: [{ line: 2, column: 3, message: "Unknown action" }],
+          warnings: ["No entities listed"],
+        }),
+    });
+    const user = userEvent.setup();
+    renderPage("SecurityOfficer");
+
+    await screen.findByLabelText("Policy YAML");
+    await user.click(screen.getByRole("button", { name: "Validate" }));
+
+    expect(
+      await screen.findByText("Line 2, column 3: Unknown action"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1\s+problem\s+found/)).toBeInTheDocument();
+    expect(screen.getByText("No entities listed")).toBeInTheDocument();
+  });
+
+  it("says when the policy is valid", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderPage("SecurityOfficer");
+
+    await screen.findByLabelText("Policy YAML");
+    await user.click(screen.getByRole("button", { name: "Validate" }));
+
+    expect(await screen.findByText("The policy is valid.")).toBeInTheDocument();
+  });
+
+  it("will not validate text that has not been saved", async () => {
+    stubApi();
+    const user = userEvent.setup();
+    renderPage("SecurityOfficer");
+
+    await user.type(await screen.findByLabelText("Policy YAML"), "x");
+
+    expect(screen.getByRole("button", { name: "Validate" })).toBeDisabled();
+    expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument();
   });
 });

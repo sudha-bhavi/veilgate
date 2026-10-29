@@ -2,10 +2,13 @@ import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { LogOut, Moon, Sun } from "lucide-react";
 import { navFor } from "../auth/nav";
+import { useIdleSignOut } from "../auth/useIdleSignOut";
 import { useSession } from "../auth/useSession";
 import { signOut } from "../lib/api";
 import { currentTheme, setTheme, type Theme } from "../lib/theme";
+import { showToast } from "../lib/toast";
 import Button from "./Button";
+import IdleWarning from "./IdleWarning";
 
 // "TenantAdmin" -> "Tenant Admin"
 const readable = (role: string) => role.replace(/([a-z])([A-Z])/g, "$1 $2");
@@ -15,6 +18,13 @@ export default function AppShell() {
   const navigate = useNavigate();
   const [theme, setCurrent] = useState<Theme>(currentTheme);
   const [signingOut, setSigningOut] = useState(false);
+
+  async function handleIdle() {
+    showToast("You were signed out because of inactivity.", "info");
+    await signOut();
+    navigate("/login", { replace: true });
+  }
+  const { warning, stayActive } = useIdleSignOut(handleIdle);
 
   if (session.status !== "signedIn") return null; // RequireAuth already handles the other cases
 
@@ -88,6 +98,8 @@ export default function AppShell() {
           <Outlet />
         </div>
       </div>
+
+      {warning && <IdleWarning onStay={stayActive} />}
     </div>
   );
 }

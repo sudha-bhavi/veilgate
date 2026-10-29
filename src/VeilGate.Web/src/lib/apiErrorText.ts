@@ -8,6 +8,10 @@ export function describeApiError(error: unknown): string {
       : "Too many requests. Wait a moment and try again.";
   }
   if (error.status === 403) return "Your role is not allowed to do this.";
-  const fields = error.errors ? Object.values(error.errors).flat() : [];
+  const fields = error.errors
+    ? Object.values(error.errors)
+        .flat()
+        .filter((message): message is string => typeof message === "string")
+    : [];
   return fields.length > 0 ? fields.join(" ") : error.message;
 }

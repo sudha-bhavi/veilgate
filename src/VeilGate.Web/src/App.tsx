@@ -1,7 +1,13 @@
 import { useEffect } from "react";
 import { Route, Routes } from "react-router-dom";
 import { restoreSession } from "./lib/api";
-import { ALL_TENANT_ROLES, PLAYGROUND_ROLES } from "./auth/roles";
+import {
+  ALL_TENANT_ROLES,
+  API_CLIENT_ROLES,
+  EVALUATION_ROLES,
+  PLAYGROUND_ROLES,
+  PROVIDER_ROLES,
+} from "./auth/roles";
 import RequireAuth from "./auth/RequireAuth";
 import AppShell from "./components/AppShell";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -18,6 +24,13 @@ import { POLICY_AUTHOR_ROLES } from "./auth/policyAccess";
 import PoliciesPage from "./pages/PoliciesPage";
 import NewPolicyPage from "./pages/NewPolicyPage";
 import PolicyDetailPage from "./pages/PolicyDetailPage";
+import ApiClientsPage from "./pages/ApiClientsPage";
+import NewApiClientPage from "./pages/NewApiClientPage";
+import ApiClientDetailPage from "./pages/ApiClientDetailPage";
+import ProvidersPage from "./pages/ProvidersPage";
+import EvaluationsPage from "./pages/EvaluationsPage";
+import EvaluationDetailPage from "./pages/EvaluationDetailPage";
+import EvaluationComparePage from "./pages/EvaluationComparePage";
 
 export default function App() {
   // The access token lives in memory, so a reload loses it; the refresh cookie brings the session back.
@@ -36,30 +49,65 @@ export default function App() {
           path="/forgot-password"
           element={<Placeholder title="Forgot password" />}
         />
+
+        {/* Every signed-in tenant role */}
         <Route element={<RequireAuth roles={ALL_TENANT_ROLES} />}>
           <Route element={<AppShell />}>
             <Route
               path="/dashboard"
               element={<Placeholder title="Dashboard" />}
             />
+            <Route path="/policies" element={<PoliciesPage />} />
+            <Route path="/policies/:id" element={<PolicyDetailPage />} />
           </Route>
-          <Route path="/policies" element={<PoliciesPage />} />
-          <Route path="/policies/:id" element={<PolicyDetailPage />} />
         </Route>
+
         <Route element={<RequireAuth roles={POLICY_AUTHOR_ROLES} />}>
           <Route element={<AppShell />}>
             <Route path="/policies/new" element={<NewPolicyPage />} />
           </Route>
         </Route>
+
+        <Route element={<RequireAuth roles={PLAYGROUND_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/playground" element={<PlaygroundPage />} />
+          </Route>
+        </Route>
+
+        {/* The same roles the server allows for each area */}
+        <Route element={<RequireAuth roles={API_CLIENT_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/clients" element={<ApiClientsPage />} />
+            <Route path="/clients/new" element={<NewApiClientPage />} />
+            <Route path="/clients/:id" element={<ApiClientDetailPage />} />
+          </Route>
+        </Route>
+
+        <Route element={<RequireAuth roles={PROVIDER_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/providers" element={<ProvidersPage />} />
+          </Route>
+        </Route>
+
+        <Route element={<RequireAuth roles={EVALUATION_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/evaluations" element={<EvaluationsPage />} />
+            <Route
+              path="/evaluations/compare"
+              element={<EvaluationComparePage />}
+            />
+            <Route
+              path="/evaluations/:id"
+              element={<EvaluationDetailPage />}
+            />
+          </Route>
+        </Route>
+
+        {/* Any signed-in person: the 403 page and anything that does not exist */}
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
             <Route path="/403" element={<ForbiddenPage />} />
             <Route path="*" element={<NotFoundPage />} />
-          </Route>
-        </Route>
-        <Route element={<RequireAuth roles={PLAYGROUND_ROLES} />}>
-          <Route element={<AppShell />}>
-            <Route path="/playground" element={<PlaygroundPage />} />
           </Route>
         </Route>
       </Routes>

@@ -12,7 +12,13 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { ALL_TENANT_ROLES, PLAYGROUND_ROLES } from "./roles";
+import {
+  ALL_TENANT_ROLES,
+  API_CLIENT_ROLES,
+  EVALUATION_ROLES,
+  PLAYGROUND_ROLES,
+  PROVIDER_ROLES,
+} from "./roles";
 
 export type NavItem = {
   label: string;
@@ -22,7 +28,6 @@ export type NavItem = {
 };
 
 const ADMIN = ["TenantAdmin"];
-const BUILDERS = ["TenantAdmin", "Developer"];
 const OVERSIGHT = ["TenantAdmin", "SecurityOfficer"];
 
 // Which role sees which link. This only decides what to show; the server checks every request.
@@ -45,13 +50,23 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: ShieldCheck,
     roles: ALL_TENANT_ROLES,
   },
-  { label: "API clients", path: "/clients", icon: KeyRound, roles: BUILDERS },
-  { label: "Providers", path: "/providers", icon: Server, roles: BUILDERS },
+  {
+    label: "API clients",
+    path: "/clients",
+    icon: KeyRound,
+    roles: API_CLIENT_ROLES,
+  },
+  {
+    label: "Providers",
+    path: "/providers",
+    icon: Server,
+    roles: PROVIDER_ROLES,
+  },
   {
     label: "Evaluations",
     path: "/evaluations",
     icon: ClipboardCheck,
-    roles: ALL_TENANT_ROLES,
+    roles: EVALUATION_ROLES,
   },
   {
     label: "Requests",

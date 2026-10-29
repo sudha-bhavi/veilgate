@@ -35,4 +35,19 @@ describe("describeApiError", () => {
       "Something went wrong. Try again.",
     );
   });
+
+  it("ignores error details that are not plain messages", () => {
+    const error = new ApiError(
+      422,
+      "policy.invalid_definition",
+      "Fix the errors in the draft before submitting.",
+      [{ line: 1, column: 2, message: "x" }] as unknown as Record<
+        string,
+        string[]
+      >,
+    );
+    expect(describeApiError(error)).toBe(
+      "Fix the errors in the draft before submitting.",
+    );
+  });
 });
