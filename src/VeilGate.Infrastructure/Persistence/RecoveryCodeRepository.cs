@@ -15,5 +15,10 @@ public sealed class RecoveryCodeRepository(VeilGateDbContext db) : IRecoveryCode
     public Task<int> CountUnusedAsync(Guid userId, CancellationToken ct) =>
         db.RecoveryCodes.CountAsync(c => c.UserId == userId && c.UsedAt == null, ct);
 
+    public Task<List<RecoveryCode>> ListForUserAsync(Guid userId, CancellationToken ct) =>
+        db.RecoveryCodes.Where(c => c.UserId == userId).ToListAsync(ct);
+
+    public void RemoveRange(IEnumerable<RecoveryCode> codes) => db.RecoveryCodes.RemoveRange(codes);
+
     public Task SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
 }

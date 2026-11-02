@@ -5,6 +5,7 @@ using VeilGate.Application.Abstractions;
 using VeilGate.Infrastructure.Llm;
 using VeilGate.Infrastructure.Persistence;
 using VeilGate.Infrastructure.Security;
+using VeilGate.Infrastructure.Email;
 
 namespace VeilGate.Infrastructure;
 
@@ -17,6 +18,7 @@ public static class DependencyInjection
         services.AddLlmGateway(config.GetSection(Llm.LlmOptions.Section).Get<Llm.LlmOptions>() ?? new Llm.LlmOptions());
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IInvitationRepository, InvitationRepository>();
         services.AddScoped<IMfaFactorRepository, MfaFactorRepository>();
         services.AddScoped<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
@@ -30,6 +32,10 @@ public static class DependencyInjection
         services.AddScoped<IAuditChainVerifier, AuditChainVerifier>();
         services.AddScoped<IAuditEventReader, AuditEventReader>();
         services.AddScoped<ISecurityEventWriter, SecurityEventWriter>();
+                services.AddOptions<SmtpOptions>().BindConfiguration(SmtpOptions.Section);
+        services.AddOptions<ConsoleOptions>().BindConfiguration(ConsoleOptions.Section);
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        services.AddSingleton<IConsoleLinks, ConsoleLinks>();
                 services.AddScoped<IPolicyRepository, PolicyRepository>();
                         services.AddScoped<IEvaluationRepository, EvaluationRepository>();
         services.AddSingleton<ISecretProtector>(sp =>
