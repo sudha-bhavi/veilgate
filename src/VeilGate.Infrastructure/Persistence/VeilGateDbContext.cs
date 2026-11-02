@@ -36,6 +36,7 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<EvalCase> EvalCases => Set<EvalCase>();
     public DbSet<EvalRun> EvalRuns => Set<EvalRun>();
     public DbSet<EvalLeak> EvalRunLeaks => Set<EvalLeak>();
+        public DbSet<Invitation> Invitations => Set<Invitation>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.HasPostgresExtension("citext");
@@ -156,6 +157,35 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
             });
         });
 
+                b.Entity<Invitation>(e =>
+        {
+            e.ToTable("invitations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.UserId).HasColumnName("user_id").IsRequired();
+            e.Property(x => x.Email).HasColumnName("email").HasColumnType("citext").IsRequired();
+            e.Property(x => x.Role).HasColumnName("role").HasConversion<string>().HasMaxLength(20).IsRequired();
+            e.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            e.Property(x => x.AcceptedAt).HasColumnName("accepted_at");
+            e.Property(x => x.InvitedBy).HasColumnName("invited_by").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.InvitedBy).OnDelete(DeleteBehavior.Restrict);
+
+            // Accepting an invitation looks it up by the hash of the link's token.
+            e.HasIndex(x => x.TokenHash).IsUnique().HasDatabaseName("ux_invitations_token_hash");
+            // "Resend" finds the open invitations of one user.
+            e.HasIndex(x => new { x.TenantId, x.UserId }).HasDatabaseName("ix_invitations_tenant_user");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_invitations_token_hash", "length(token_hash) = 64");
+                t.HasCheckConstraint("ck_invitations_role", "role in ('TenantAdmin','SecurityOfficer','Developer','Auditor')");
+            });
+        });
         b.Entity<VaultSession>(e =>
         {
             e.ToTable("vault_sessions");

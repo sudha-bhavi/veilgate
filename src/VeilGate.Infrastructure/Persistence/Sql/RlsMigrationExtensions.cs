@@ -181,4 +181,20 @@ public static class RlsMigrationExtensions
         REVOKE ALL ON FUNCTION eval_claim_next_run(int, int) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION eval_claim_next_run(int, int) TO vg_app;
         """);
+    /// <summary>
+    /// The accept-invitation page has to find an invitation BEFORE the tenant is known (the link carries only the token).
+    /// The same narrow read-only door as the other lookups: it returns only the tenant id. Whether the invitation is still
+    /// usable (unused, not expired) is decided in the domain, with the application's clock, so the rule lives in one place.
+    /// </summary>
+    public static void CreateInvitationLookupFunction(this MigrationBuilder mb) => mb.Sql("""
+        DROP FUNCTION IF EXISTS auth_find_invitation_tenant(varchar);
+        CREATE FUNCTION auth_find_invitation_tenant(p_hash varchar)
+        RETURNS uuid
+        LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+            SELECT i.tenant_id FROM invitations i WHERE i.token_hash = p_hash LIMIT 1
+        $$;
+        REVOKE ALL ON FUNCTION auth_find_invitation_tenant(varchar) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION auth_find_invitation_tenant(varchar) TO vg_app;
+        """);
 }
