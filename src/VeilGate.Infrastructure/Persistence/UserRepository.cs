@@ -29,6 +29,34 @@ public sealed class UserRepository(VeilGateDbContext db) : IUserRepository
         => db.Tenants.AnyAsync(t => t.Status == "Active", ct); // row-level security leaves only the caller's own tenant
 
     public Task SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
+        public void Add(User user) => db.Users.Add(user);
+
+    public Task<string?> GetTenantNameAsync(CancellationToken ct)
+        => db.Tenants.AsNoTracking().Select(t => t.Name).FirstOrDefaultAsync(ct); // row-level security leaves only the caller's own tenant
+
+    public async Task<(IReadOnlyList<UserListRow> Items, int Total)> ListAsync(
+        UserRole? role, UserStatus? status, string? search, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.Users.AsNoTracking();
+        if (role is { } r) query = query.Where(u => u.Role == r);
+        if (status is { } s) query = query.Where(u => u.Status == s);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            // The search text is data, not a pattern: escape LIKE's own wildcards.
+            var pattern = "%" + search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+            query = query.Where(u => EF.Functions.ILike(u.DisplayName, pattern, "\\") || EF.Functions.ILike(u.Email, pattern, "\\"));
+        }
+
+        var total = await query.CountAsync(ct);
+        var rows = await query.OrderBy(u => u.DisplayName).ThenBy(u => u.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(u => new { User = u, HasMfa = db.MfaFactors.Any(f => f.UserId == u.Id && f.IsConfirmed) })
+            .ToListAsync(ct);
+        return (rows.Select(x => new UserListRow(x.User, x.HasMfa)).ToList(), total);
+    }
+
+    public Task<int> CountActiveAdminsExceptAsync(Guid exceptUserId, CancellationToken ct)
+        => db.Users.CountAsync(u => u.Role == UserRole.TenantAdmin && u.Status == UserStatus.Active && u.Id != exceptUserId, ct);
 }
 
 internal sealed class LoginCandidateRow

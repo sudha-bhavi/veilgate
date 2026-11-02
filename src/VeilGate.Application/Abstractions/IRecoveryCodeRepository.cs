@@ -11,5 +11,10 @@ public interface IRecoveryCodeRepository
 
     Task<int> CountUnusedAsync(Guid userId, CancellationToken ct);
 
+    /// <summary>All of one user's codes, used or not. Resetting someone's MFA removes them all.</summary>
+    Task<List<RecoveryCode>> ListForUserAsync(Guid userId, CancellationToken ct);
+
+    void RemoveRange(IEnumerable<RecoveryCode> codes);
+
     Task SaveChangesAsync(CancellationToken ct);
 }
