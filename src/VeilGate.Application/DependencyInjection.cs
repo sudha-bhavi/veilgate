@@ -67,12 +67,24 @@ public static class DependencyInjection
         services.AddScoped<Evaluation.GetEvaluationLeaksHandler>();
         services.AddScoped<Evaluation.GetEvaluationReportHandler>();
         services.AddScoped<Evaluation.CompareEvaluationsHandler>();
-                services.AddScoped<Auth.StepUpHandler>();
+        services.AddScoped<Auth.StepUpHandler>();
 
         services.AddScoped<Audit.ListAuditEventsHandler>();
         services.AddScoped<Audit.ListAuditActionsHandler>();
         services.AddScoped<Audit.VerifyAuditChainHandler>();
-                services.AddEvaluationRunner();
+        services.AddEvaluationRunner();
+        services.AddScoped<Users.UserAuditor>();
+        services.AddScoped<Users.InvitationMailer>();
+        services.AddScoped<Users.InvitationFinder>();
+        services.AddScoped<Users.InviteUserHandler>();
+        services.AddScoped<Users.ResendInvitationHandler>();
+        services.AddScoped<Users.ViewInvitationHandler>();
+        services.AddScoped<Users.AcceptInvitationHandler>();
+        services.AddScoped<Users.ListUsersHandler>();
+        services.AddScoped<Users.ChangeUserRoleHandler>();
+        services.AddScoped<Users.DisableUserHandler>();
+        services.AddScoped<Users.EnableUserHandler>();
+        services.AddScoped<Users.ResetMfaHandler>();
         return services;
     }
 
