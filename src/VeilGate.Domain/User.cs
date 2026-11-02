@@ -86,7 +86,42 @@ public sealed class User : TenantEntity
         UpdatedAt = now;
         return Result.Success();
     }
+    /// <summary>
+    /// Changes the role. The role is written inside the access token, so the token version goes up and every
+    /// token the person already holds (with the old role) stops working.
+    /// </summary>
+    public Result ChangeRole(UserRole newRole, DateTimeOffset now)
+    {
+        if (newRole == UserRole.PlatformAdmin) return Result.Failure(Error.Validation("validation.failed", "That role cannot be assigned here."));
+        if (newRole == Role) return Result.Failure(Error.Conflict("resource.conflict", "User already has that role."));
+        Role = newRole;
+        TokenVersion++;
+        UpdatedAt = now;
+        return Result.Success();
+    }
 
+    /// <summary>
+    /// Undoes Disable. Someone who never accepted their invitation goes back to Invited (they still have no password),
+    /// everyone else goes back to Active. Any old lock is cleared too.
+    /// </summary>
+    public Result Enable(DateTimeOffset now)
+    {
+        if (Status != UserStatus.Disabled) return Result.Failure(Error.Conflict("resource.conflict", "User is not disabled."));
+        Status = PasswordHash is null ? UserStatus.Invited : UserStatus.Active;
+        FailedAttempts = 0;
+        LockedUntil = null;
+        UpdatedAt = now;
+        return Result.Success();
+    }
+        /// <summary>Sets the name the person typed when they accepted their invitation.</summary>
+    public Result Rename(string displayName, DateTimeOffset now)
+    {
+        displayName = (displayName ?? string.Empty).Trim();
+        if (displayName.Length is < 1 or > 120) return Result.Failure(Error.Validation("validation.failed", "Name must be 1 to 120 characters."));
+        DisplayName = displayName;
+        UpdatedAt = now;
+        return Result.Success();
+    }
     private static bool IsPlausibleEmail(string e)
     {
         if (e.Length is < 3 or > 254) return false;

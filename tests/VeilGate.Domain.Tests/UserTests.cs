@@ -81,4 +81,62 @@ public class UserTests
         u.TokenVersion.Should().Be(2);
         u.Disable(Now).IsFailure.Should().BeTrue();
     }
+        [Fact]
+    public void Changing_role_bumps_token_version_and_refuses_the_same_role()
+    {
+        var u = NewUser();
+        u.ChangeRole(UserRole.Developer, Now).IsSuccess.Should().BeTrue();
+        u.Role.Should().Be(UserRole.Developer);
+        u.TokenVersion.Should().Be(2);
+        u.ChangeRole(UserRole.Developer, Now).IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_tenant_cannot_hand_out_the_platform_admin_role()
+    {
+        var u = NewUser();
+        u.ChangeRole(UserRole.PlatformAdmin, Now).IsFailure.Should().BeTrue();
+        u.Role.Should().Be(UserRole.Auditor);
+    }
+
+    [Fact]
+    public void Enabling_returns_an_activated_user_to_active()
+    {
+        var u = NewUser();
+        u.AcceptInvitation("$argon2id$hash", Now);
+        u.Disable(Now);
+        u.Enable(Now).IsSuccess.Should().BeTrue();
+        u.Status.Should().Be(UserStatus.Active);
+    }
+
+    [Fact]
+    public void Enabling_someone_who_never_accepted_returns_them_to_invited()
+    {
+        var u = NewUser();
+        u.Disable(Now);
+        u.Enable(Now).IsSuccess.Should().BeTrue();
+        u.Status.Should().Be(UserStatus.Invited);
+    }
+
+    [Fact]
+    public void Enable_only_works_on_a_disabled_user()
+        => NewUser().Enable(Now).IsFailure.Should().BeTrue();
+    
+        [Fact]
+    public void Renaming_trims_the_name()
+    {
+        var u = NewUser();
+        u.Rename("  Jordan Q. Reyes ", Now).IsSuccess.Should().BeTrue();
+        u.DisplayName.Should().Be("Jordan Q. Reyes");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Renaming_rejects_an_empty_name(string name)
+        => NewUser().Rename(name, Now).IsFailure.Should().BeTrue();
+
+    [Fact]
+    public void Renaming_rejects_a_name_over_120_characters()
+        => NewUser().Rename(new string('a', 121), Now).IsFailure.Should().BeTrue();
 }
