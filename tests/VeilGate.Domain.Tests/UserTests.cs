@@ -139,4 +139,47 @@ public class UserTests
     [Fact]
     public void Renaming_rejects_a_name_over_120_characters()
         => NewUser().Rename(new string('a', 121), Now).IsFailure.Should().BeTrue();
+
+    private static User ActiveUser()
+    {
+        var u = NewUser();
+        u.AcceptInvitation("old-hash", Now);
+        return u;
+    }
+
+    [Fact]
+    public void Changing_the_password_stores_the_hash_and_logs_every_other_token_out()
+    {
+        var u = ActiveUser();
+        var later = Now.AddDays(3);
+        u.RegisterFailedLogin(later);
+        var version = u.TokenVersion;
+
+        var result = u.ChangePassword("new-hash", later);
+
+        result.IsSuccess.Should().BeTrue();
+        u.PasswordHash.Should().Be("new-hash");
+        u.PasswordChangedAt.Should().Be(later);
+        u.TokenVersion.Should().Be(version + 1);
+        u.FailedAttempts.Should().Be(0);
+    }
+
+    [Fact]
+    public void Only_an_active_person_can_change_their_password()
+    {
+        NewUser().ChangePassword("new-hash", Now).IsFailure.Should().BeTrue();   // still Invited
+
+        var disabled = ActiveUser();
+        disabled.Disable(Now);
+        disabled.ChangePassword("new-hash", Now).IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Changing_the_password_needs_a_hash()
+    {
+        var u = ActiveUser();
+
+        u.ChangePassword("  ", Now).IsFailure.Should().BeTrue();
+        u.PasswordHash.Should().Be("old-hash");
+    }
 }
