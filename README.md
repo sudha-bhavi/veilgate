@@ -32,6 +32,8 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
   F1 and leaks per type, and can compare two runs.
 - **People and invitations.** Tenant Admins invite colleagues by email (a single-use link that expires after 48 hours),
   choose their role, disable accounts, and reset someone's two-step sign-in.
+- **A read-only demo.** An optional "Try the demo" button on the sign-in page lets a visitor look around with sample
+  data, without an account. It is off by default and cannot change anything (see "Try the demo" below).
 - **A React console** for all of it: playground, policies with a YAML editor, API clients, providers, evaluations,
   the audit log and users.
 
@@ -102,7 +104,8 @@ The seeder only works on a database on your own machine.
 It also creates some sample content in that organisation, so the console has something to show: a published policy
 ("HIPAA Safe Harbor") and one waiting for approval ("Names only"), an API client (`ehr-bridge`, whose secret is printed
 once in the terminal), a dataset of 200 invented notes, and a queued evaluation run that the worker finishes. Running
-the seeder again changes nothing.
+the seeder again changes nothing. It also creates `demo@acme.test`, a Security Officer with a random, discarded
+password and no authenticator, who is only reachable through the optional demo button below.
 
 **5. Start the console**
 
@@ -117,6 +120,30 @@ one-time recovery codes. Keep them: they are shown only once.
 
 When you add a model provider, enter its address without `/v1` (for the WireMock container: `http://localhost:8089`).
 VeilGate adds `/v1/chat/completions` itself.
+
+**Try the demo (optional)**
+
+The sign-in page can offer a "Try the demo" button that signs a visitor in as the seeded `demo@acme.test` (a Security
+Officer), with no password and no authenticator. It is **off by default**. First apply the migration that adds the
+`is_demo` column to sessions (`AddSessionDemoFlag`), then start the API with `Demo__Enabled=true`:
+
+```bash
+dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
+ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 Demo__Enabled=true dotnet run --project src/VeilGate.Api
+```
+
+- **Read-only.** A demo session can look at every page a Security Officer can see, try the Playground, test a policy
+  on sample text, and sign out. Every other change is refused with `403 demo.read_only`, before it reaches a controller.
+  That includes the step-up check, so a demo session can never publish or roll back a policy.
+- **Marked and short.** The session is flagged as a demo in the database and in its token (sign-in method `demo`), it
+  lasts one hour, and refreshing it keeps it a demo session. Every demo sign-in is recorded in the audit log
+  (`auth.demo_login`).
+- **Never an administrator.** The API refuses to sign in a demo user who is a Tenant Admin or Platform Admin. The
+  settings are `Demo__Enabled` (default `false`) and `Demo__UserEmail` (default `demo@acme.test`).
+
+> **Warning.** This button skips the passwords and two-step sign-in that the rest of VeilGate insists on. Switch it on
+> only for a sandbox organisation that holds synthetic data and nothing else. The go-live checklist in the deployment
+> document (seed accounts removed, MFA enforced for everyone) still applies to a real deployment.
 
 **Check the console under its production security policy**
 
