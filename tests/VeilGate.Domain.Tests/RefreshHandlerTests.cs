@@ -28,14 +28,14 @@ public class RefreshHandlerTests
     private RefreshHandler Handler() => new(_sessions, _users, _tenant, _tokens, _clock);
 
     // A signed-in user with one session that the (fake) database can find by its token.
-    private (User user, Session session, string token) GivenSignedIn()
+    private (User user, Session session, string token) GivenSignedIn(bool demo = false)
     {
         var user = User.Invite(Guid.NewGuid(), "jordan@acme.test", "Jordan", UserRole.Developer, Now).Value;
         user.AcceptInvitation("stored-hash", Now);
         _users.GetCurrentTenantUserAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
 
         var token = RefreshTokens.Generate();
-        var session = Session.Start(user.TenantId, user.Id, RefreshTokens.Hash(token), Now).Value;
+        var session = Session.Start(user.TenantId, user.Id, RefreshTokens.Hash(token), Now, demo).Value;
         var hash = RefreshTokens.Hash(token);
         _sessions.FindTenantByRefreshHashAsync(hash, Arg.Any<CancellationToken>()).Returns(session.TenantId);
         _sessions.FindByRefreshHashAsync(hash, Arg.Any<CancellationToken>()).Returns(session);
@@ -97,5 +97,27 @@ public class RefreshHandlerTests
 
         r.Error.Should().Be(Session.RefreshInvalid);
         session.RevokeReason.Should().Be("user_inactive");
+    }
+
+    [Fact]
+    public async Task Refreshing_a_demo_session_keeps_it_a_demo_session()
+    {
+        var (_, _, token) = GivenSignedIn(demo: true);
+
+        await Handler().HandleAsync(new RefreshCommand(token));
+
+        _tokens.Received(1).IssueAccessToken(
+            Arg.Is<AccessTokenClaims>(c => c.Amr.SequenceEqual(new[] { "demo" })), Arg.Any<DateTimeOffset?>());
+    }
+
+    [Fact]
+    public async Task Refreshing_a_normal_session_still_says_password_and_second_factor()
+    {
+        var (_, _, token) = GivenSignedIn();
+
+        await Handler().HandleAsync(new RefreshCommand(token));
+
+        _tokens.Received(1).IssueAccessToken(
+            Arg.Is<AccessTokenClaims>(c => c.Amr.SequenceEqual(new[] { "pwd", "mfa" })), Arg.Any<DateTimeOffset?>());
     }
 }

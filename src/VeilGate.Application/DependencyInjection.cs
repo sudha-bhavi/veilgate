@@ -68,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<Evaluation.GetEvaluationReportHandler>();
         services.AddScoped<Evaluation.CompareEvaluationsHandler>();
         services.AddScoped<Auth.StepUpHandler>();
+        services.AddScoped<Auth.DemoSignInHandler>();
 
         services.AddScoped<Audit.ListAuditEventsHandler>();
         services.AddScoped<Audit.ListAuditActionsHandler>();

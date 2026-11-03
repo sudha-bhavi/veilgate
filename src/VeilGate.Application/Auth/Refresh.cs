@@ -43,7 +43,7 @@ public sealed class RefreshHandler(
         var accessToken = tokens.IssueAccessToken(new AccessTokenClaims(
             user.Id, user.TenantId, user.Role.ToString(),
             SessionId: session.Id,
-            Amr: ["pwd", "mfa"],          // how the user originally signed in (RFC 8176 values)
+            Amr: session.IsDemo ? [DemoSignInHandler.Method] : ["pwd", "mfa"],   // how the user originally signed in (RFC 8176 values)
             AuthTime: session.CreatedAt,  // when they actually signed in, not now
             TokenVersion: user.TokenVersion), now);
 
