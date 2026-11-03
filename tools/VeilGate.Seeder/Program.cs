@@ -67,4 +67,8 @@ foreach (var (email, name, role) in people)
 }
 
 await db.SaveChangesAsync();
+
+var admin = await db.Users.FirstAsync(u => u.Email == "admin@acme.test");
+var officer = await db.Users.FirstAsync(u => u.Email == "security@acme.test");
+await DemoContent.SeedAsync(db, tenant, admin, officer, now);
 return 0;

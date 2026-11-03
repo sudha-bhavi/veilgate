@@ -18,7 +18,7 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 
 ## Highlights
 
-- **Policies as YAML**, with a real approval workflow: draft, validate, submit, approve by a *different* person, publish.
+- **Policies as YAML**, with a real approval workflow: draft, validate, submit, approve by a _different_ person, publish.
   Every version is kept, can be compared (diff), and can be rolled back.
 - **OpenAI-compatible endpoint.** Existing clients only change their base URL. API clients have scoped credentials,
   rate limits, network allowlists, and secret rotation with a grace period.
@@ -37,26 +37,26 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 
 ## Tech stack
 
-| Area     | What                                                                                           |
-| -------- | ---------------------------------------------------------------------------------------------- |
-| Backend  | .NET 10, ASP.NET Core, FluentValidation, Polly (retries and circuit breaker for LLM calls)     |
-| Data     | PostgreSQL 16 with row-level security, EF Core migrations                                      |
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query, React Router, Monaco editor        |
+| Area     | What                                                                                          |
+| -------- | --------------------------------------------------------------------------------------------- |
+| Backend  | .NET 10, ASP.NET Core, FluentValidation, Polly (retries and circuit breaker for LLM calls)    |
+| Data     | PostgreSQL 16 with row-level security, EF Core migrations                                     |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query, React Router, Monaco editor       |
 | Testing  | xUnit (backend), Vitest and Testing Library (frontend), throwaway Postgres for database tests |
-| Local    | Docker Compose: Postgres, Redis, Redpanda (Kafka), MailHog, WireMock                           |
+| Local    | Docker Compose: Postgres, Redis, Redpanda (Kafka), MailHog, WireMock                          |
 
 ## Status
 
-| Milestone | Scope                                                                                         | State          |
-| --------- | --------------------------------------------------------------------------------------------- | -------------- |
-| M0        | Solution skeleton, Docker Compose, Postgres roles, health endpoint, first tests               | ✅ Done        |
-| M1        | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh                           | ✅ Done        |
-| M2        | Detection engine, policy engine, tokenizer + vault                                            | ✅ Done        |
-| M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                                  | ✅ Done        |
-| M4        | Policy workflow, API clients, LLM providers, evaluations, step-up check                       | ✅ Done        |
-| M5        | React console: sign-in, playground, policies, API clients, providers, evaluations, audit log, users | ✅ Done        |
-| M6        | Kafka outbox, workers, dashboards                                                             |                |
-| M7        | Hardening, pen test, deployment                                                               |                |
+| Milestone | Scope                                                                                               | State   |
+| --------- | --------------------------------------------------------------------------------------------------- | ------- |
+| M0        | Solution skeleton, Docker Compose, Postgres roles, health endpoint, first tests                     | ✅ Done |
+| M1        | Tenants, users, EF migrations with RLS, login + MFA + JWT + refresh                                 | ✅ Done |
+| M2        | Detection engine, policy engine, tokenizer + vault                                                  | ✅ Done |
+| M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                                        | ✅ Done |
+| M4        | Policy workflow, API clients, LLM providers, evaluations, step-up check                             | ✅ Done |
+| M5        | React console: sign-in, playground, policies, API clients, providers, evaluations, audit log, users | ✅ Done |
+| M6        | Kafka outbox, workers, dashboards                                                                   |         |
+| M7        | Hardening, pen test, deployment                                                                     |         |
 
 In the console, Dashboard, Requests, Security and Settings are marked "Not built yet": their server side is not
 written. Everything else works end to end.
@@ -98,6 +98,11 @@ dotnet run --project tools/VeilGate.Seeder -- --connection "Host=localhost;Datab
 This creates the tenant "Acme Health" and one person per role: `admin@acme.test` (Tenant Admin),
 `security@acme.test` (Security Officer), `dev@acme.test` (Developer) and `auditor@acme.test` (Auditor).
 The seeder only works on a database on your own machine.
+
+It also creates some sample content in that organisation, so the console has something to show: a published policy
+("HIPAA Safe Harbor") and one waiting for approval ("Names only"), an API client (`ehr-bridge`, whose secret is printed
+once in the terminal), a dataset of 200 invented notes, and a queued evaluation run that the worker finishes. Running
+the seeder again changes nothing.
 
 **5. Start the console**
 
@@ -233,7 +238,7 @@ POST /api/v1/gateway/chat/completions  scope gateway:invoke       OpenAI-compati
 POST /api/v1/playground/run            signed-in Developer / Security Officer / Tenant Admin
 ```
 
-- **Tokens.** Gateway endpoints take a *client* token (claims `client_id`, `tid`, `scope`); a person's token is refused there, and a client token is refused on every console endpoint.
+- **Tokens.** Gateway endpoints take a _client_ token (claims `client_id`, `tid`, `scope`); a person's token is refused there, and a client token is refused on every console endpoint.
   Client tokens are issued by `POST /oauth/token` for a stored API client (M4d). The playground works for a signed-in user.
 - **Policy.** The policy named in the request, else the API client's default policy, else the built-in `hipaa-safe-harbor` template (`PolicyTemplates`). Stored policies arrived in M4a to M4c.
 - **Model providers** are per tenant and live in the database since M4e (see below). Each provider gets its own timeouts, retries (2, with backoff and jitter), circuit breaker and concurrency limit, and the destination address is checked against private and metadata ranges on every connection (set `Llm:AllowPrivateNetworks` only in Development).
