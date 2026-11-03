@@ -457,6 +457,20 @@ DOTNET_ENVIRONMENT=Development dotnet run --project src/VeilGate.Workers
   To watch a topic: `docker compose -f deploy/docker-compose.yml --env-file .env exec kafka rpk topic consume vg.gateway.requests.v1 --offset end`.
   The worker reaches Kafka at `localhost:19092`; containers use `kafka:9092`.
 
+### M6: gateway events
+
+Every gateway call that is written to the audit log (detect, deidentify, reidentify, chat; success, denied or failed) also puts
+one event on `vg.gateway.requests.v1`. The metrics consumer and the Requests page are built from these events.
+
+- **Same transaction as the audit row.** The pipeline queues the event and then writes the audit row. The audit writer's save
+  stores both, so a failed audit write leaves no event behind and an event never exists without its audit row.
+- **What an event holds.** Request id, time, tenant, client, user or client, action, result, how many values of each entity type
+  were protected, latency, and for chat the model, provider and policy version. For a denied or failed call it holds the reason
+  code. It never holds text, found values or tokens.
+- **Time.** The event and the audit row use the same clock reading, so they match exactly.
+- **Not every failure is announced.** A call that fails before it is audited (for example an unknown policy) is neither audited
+  nor announced.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
@@ -474,5 +488,7 @@ Where this project departs from the design documents (which were drafted with AI
   a status column the documents do not have.
 - **Order on retry.** Messages with the same key are published in creation order, but a retried message can arrive after a later
   one. The metrics consumer does not depend on order.
+- **Events follow the audit log.** The documents do not say which gateway calls are announced. Here it is exactly the ones that are
+  audited, so the Requests page and the audit log agree.
 - **Fixed limits.** The 5 attempts, 60-second lease and 5-minute backoff cap are my choices; the documents only give the cap.
   All are settings under `Outbox`.
