@@ -21,3 +21,6 @@ export const EVALUATION_ROLES = [
 
 // Mirrors the server's AuditReader policy.
 export const AUDIT_ROLES = ["TenantAdmin", "SecurityOfficer", "Auditor"] as const;
+
+// Mirrors the server's UserAdmin policy.
+export const USER_ADMIN_ROLES = ["TenantAdmin"] as const;
