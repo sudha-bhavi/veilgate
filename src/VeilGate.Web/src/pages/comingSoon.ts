@@ -29,16 +29,6 @@ export const COMING_SOON: readonly ComingSoon[] = [
     ],
   },
   {
-    path: "/users",
-    title: "Users",
-    summary: "The people in your organisation and what they may do.",
-    planned: [
-      "Invite people by email and set their role",
-      "Disable an account and reset a person's multi-factor setup",
-      "See who signed in recently",
-    ],
-  },
-  {
     path: "/security",
     title: "Security",
     summary: "Sign-in activity and protections across the organisation.",
