@@ -19,6 +19,8 @@ export function severityLook(severity: Severity): SeverityLook {
 const TITLES: Record<string, string> = {
   "auth.account_locked": "Account locked after repeated failed sign-ins",
   "mfa.reset": "Two-step sign-in was reset",
+  "mfa.recovery_codes_regenerated": "Recovery codes were replaced",
+  "auth.password_changed": "Password was changed",
   "oauth.invalid_secret": "An API client used a wrong secret",
   "oauth.ip_denied": "An API client called from a blocked address",
   "leak.gate_tripped": "A leak was stopped before it left the gateway",
