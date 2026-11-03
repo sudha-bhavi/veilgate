@@ -52,6 +52,22 @@ public sealed class User : TenantEntity
         return Result.Success();
     }
 
+    /// <summary>
+    /// A signed-in person chose a new password. The token version goes up, so every token the person holds (on every device)
+    /// stops working; the caller keeps the current device signed in by ending only the other sessions.
+    /// </summary>
+    public Result ChangePassword(string passwordHash, DateTimeOffset now)
+    {
+        if (Status != UserStatus.Active) return Result.Failure(Error.Conflict("resource.conflict", "Only active people can change their password."));
+        if (string.IsNullOrWhiteSpace(passwordHash)) return Result.Failure(Error.Validation("validation.failed", "Password hash is required."));
+        PasswordHash = passwordHash;
+        PasswordChangedAt = now;
+        FailedAttempts = 0;
+        TokenVersion++;
+        UpdatedAt = now;
+        return Result.Success();
+    }
+
     public void RegisterFailedLogin(DateTimeOffset now)
     {
         FailedAttempts++;

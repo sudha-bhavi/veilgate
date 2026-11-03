@@ -19,6 +19,8 @@ public sealed class AuthAuditor(IAuditWriter audit, ISecurityEventWriter securit
     public const string DemoSignIn = "auth.demo_login";
     public const string SessionRevoke = "auth.session_revoke";
     public const string LogoutAll = "auth.logout_all";
+    public const string PasswordChange = "auth.password_change";
+    public const string RecoveryCodesRegenerate = "auth.recovery_codes_regenerate";
 
     /// <summary>The person ended some of their own sessions. "count" is how many.</summary>
     public Task SessionsEndedAsync(Guid tenantId, Guid userId, string action, string? ip, int count, CancellationToken ct) =>

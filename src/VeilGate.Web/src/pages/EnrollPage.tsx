@@ -6,21 +6,12 @@ import AuthCard from "../components/AuthCard";
 import Button from "../components/Button";
 import CodeInput from "../components/CodeInput";
 import CopyButton from "../components/CopyButton";
+import RecoveryCodes from "../components/RecoveryCodes";
 import { confirmEnrollment, startEnrollment } from "../auth/mfaApi";
 import { mfaErrorOutcome } from "../lib/authErrors";
 import { getMfaFlow, startMfaFlow } from "../lib/mfaFlow";
 
 type Step = "scan" | "verify" | "codes";
-
-function downloadCodes(codes: string[]) {
-  const text = `VeilGate recovery codes\nEach code works once.\n\n${codes.join("\n")}\n`;
-  const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "veilgate-recovery-codes.txt";
-  link.click();
-  URL.revokeObjectURL(url);
-}
 
 export default function EnrollPage() {
   const location = useLocation();
@@ -165,20 +156,7 @@ export default function EnrollPage() {
             Save these one-time recovery codes. They are shown only once, and
             each works a single time.
           </p>
-          <ol className="grid grid-cols-2 gap-x-4 gap-y-1 font-mono">
-            {codes.map((code) => (
-              <li key={code}>{code}</li>
-            ))}
-          </ol>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => downloadCodes(codes)}>
-              Download .txt
-            </Button>
-            <CopyButton text={codes.join("\n")} label="Copy all" />
-            <Button variant="secondary" onClick={() => window.print()}>
-              Print
-            </Button>
-          </div>
+          <RecoveryCodes codes={codes} />
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
