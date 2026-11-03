@@ -156,4 +156,21 @@ public class SessionRepositoryTests(PostgresFixture pg)
 
         (await new SessionRepository(db).FindTenantByRefreshHashAsync(NewHash(), default)).Should().BeNull();
     }
+        [Fact]
+    public async Task A_demo_session_is_still_a_demo_session_when_loaded_again()
+    {
+        var (t, u) = await SeedUser();
+        var hash = NewHash();
+        var demo = Session.Start(t.Id, u.Id, hash, Now, demo: true).Value;
+        await using (var db = AppContext(t.Id))
+        {
+            var repo = new SessionRepository(db);
+            repo.Add(demo);
+            await repo.SaveChangesAsync(default);
+        }
+
+        await using var check = AppContext(t.Id);
+
+        (await new SessionRepository(check).FindByRefreshHashAsync(hash, default))!.IsDemo.Should().BeTrue();
+    }
 }

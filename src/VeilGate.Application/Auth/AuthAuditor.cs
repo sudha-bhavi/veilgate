@@ -16,6 +16,7 @@ public sealed class AuthAuditor(IAuditWriter audit, ISecurityEventWriter securit
     public const string SignOut = "auth.logout";
     public const string MfaEnroll = "auth.mfa_enroll";
     public const string StepUp = "auth.step_up";
+    public const string DemoSignIn = "auth.demo_login";
 
     /// <param name="method">How the second factor was proved ("otp" or "recovery"), when there was one.</param>
     public Task SucceededAsync(Guid tenantId, Guid userId, string action, string? ip, string? method, CancellationToken ct) =>

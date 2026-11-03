@@ -11,6 +11,7 @@ import {
 } from "react-router-dom";
 import AuthCard from "../components/AuthCard";
 import Button from "../components/Button";
+import DemoButton from "../components/DemoButton";
 import PasswordField from "../components/PasswordField";
 import TextField from "../components/TextField";
 import { login } from "../auth/authApi";
@@ -132,6 +133,8 @@ export default function LoginPage() {
           Continue
         </Button>
       </form>
+
+      <DemoButton />
 
       <p className="mt-4 text-xs text-muted">
         Protected by MFA. No real patient data should be entered in the demo.

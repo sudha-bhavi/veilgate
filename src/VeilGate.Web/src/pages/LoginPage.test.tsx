@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { fakeToken } from "../test/fakeToken";
@@ -31,12 +31,13 @@ const reply = (
   body: unknown,
   headers: Record<string, string> = {},
 ) =>
+  // A fresh Response for every call: the page now also asks the server whether the demo is on, and a Response body can be read only once.
   vi.stubGlobal(
     "fetch",
     vi
       .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify(body), { status, headers }),
+      .mockImplementation(
+        async () => new Response(JSON.stringify(body), { status, headers }),
       ),
   );
 
@@ -183,5 +184,24 @@ describe("LoginPage", () => {
     setAccessToken(fakeToken());
     renderLogin("/login?returnTo=%2F%2Fevil.example");
     expect(screen.getByText("dashboard")).toBeInTheDocument();
+  });
+
+  it("offers Try the demo when the server says it is on", async () => {
+    reply(200, { demoEnabled: true });
+    renderLogin();
+
+    expect(
+      await screen.findByRole("button", { name: "Try the demo" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer Try the demo when the server says it is off", async () => {
+    reply(200, { demoEnabled: false });
+    renderLogin();
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: "Try the demo" }),
+    ).not.toBeInTheDocument();
   });
 });

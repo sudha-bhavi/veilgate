@@ -19,6 +19,16 @@ describe("describeApiError", () => {
     ).toBe("Too many requests. Try again in 12 seconds.");
   });
 
+  it("says the demo is read-only when a change is refused in the demo", () => {
+    expect(
+      describeApiError(
+        new ApiError(403, "demo.read_only", "The demo is read-only."),
+      ),
+    ).toBe(
+      "The demo is read-only: you can look around and try the Playground, but not change anything.",
+    );
+  });
+
   it("explains a forbidden role", () => {
     expect(describeApiError(new ApiError(403, "forbidden", "Forbidden"))).toBe(
       "Your role is not allowed to do this.",

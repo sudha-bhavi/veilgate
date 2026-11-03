@@ -48,4 +48,23 @@ public sealed class AuthController(
         RefreshCookie.Clear(Response);
         return NoContent();
     }
+
+    /// <summary>
+    /// The "Try the demo" button: signs the visitor in as the one configured demo user, with no password and no second factor.
+    /// Limited per address like sign-in. When the demo is off, the answer is the same "not available" as when the user is missing.
+    /// </summary>
+    [HttpPost("demo")]
+    [EnableRateLimiting("login")]
+    public async Task<IActionResult> Demo(
+        [FromServices] DemoSignInHandler handler, [FromServices] IOptions<DemoOptions> demo, CancellationToken ct)
+    {
+        if (!demo.Value.Enabled) return Fail(DemoSignInHandler.Unavailable);
+
+        var result = await handler.HandleAsync(new DemoSignInCommand(demo.Value.UserEmail, CallerIp), ct);
+        if (result.IsFailure) return Fail(result.Error);
+
+        RefreshCookie.Write(Response, result.Value.RefreshToken, result.Value.RefreshExpiresAt);
+        Response.Headers.CacheControl = "no-store";
+        return Ok(new { accessToken = result.Value.AccessToken, tokenType = "Bearer", expiresIn = auth.Value.AccessTokenMinutes * 60 });
+    }
 }

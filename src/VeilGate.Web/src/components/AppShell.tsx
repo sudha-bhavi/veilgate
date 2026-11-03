@@ -74,6 +74,15 @@ export default function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
+        {session.claims.amr.includes("demo") && (
+          <div
+            role="status"
+            className="border-b border-warning/50 bg-warning/10 px-6 py-2 text-warning"
+          >
+            You are in the demo. It is read-only and uses sample data: look
+            around and try the Playground.
+          </div>
+        )}
         <header className="flex items-center justify-end gap-3 border-b border-line bg-surface px-6 py-3">
           <span className="text-muted">{readable(session.claims.role)}</span>
           <Button
