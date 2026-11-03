@@ -30,7 +30,10 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 - **Tamper-evident audit.** An append-only, hash-chained log of counts and ids, never text.
 - **Measured quality.** Evaluations run a policy over synthetic notes with known answers and report recall, precision,
   F1 and leaks per type, and can compare two runs.
-- **A React console** for all of it: playground, policies with a YAML editor, API clients, providers, evaluations.
+- **People and invitations.** Tenant Admins invite colleagues by email (a single-use link that expires after 48 hours),
+  choose their role, disable accounts, and reset someone's two-step sign-in.
+- **A React console** for all of it: playground, policies with a YAML editor, API clients, providers, evaluations,
+  the audit log and users.
 
 ## Tech stack
 
@@ -51,12 +54,12 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 | M2        | Detection engine, policy engine, tokenizer + vault                                            | ✅ Done        |
 | M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                                  | ✅ Done        |
 | M4        | Policy workflow, API clients, LLM providers, evaluations, step-up check                       | ✅ Done        |
-| M5        | React console: sign-in, playground, policies, API clients, providers, evaluations             | 🚧 Mostly done |
+| M5        | React console: sign-in, playground, policies, API clients, providers, evaluations, audit log, users | ✅ Done        |
 | M6        | Kafka outbox, workers, dashboards                                                             |                |
 | M7        | Hardening, pen test, deployment                                                               |                |
 
-In the console, Dashboard, Requests, Audit log, Users, Security and Settings are marked "Not built yet": their
-server side is not written. Everything else works end to end.
+In the console, Dashboard, Requests, Security and Settings are marked "Not built yet": their server side is not
+written. Everything else works end to end.
 
 ## Run it locally
 
@@ -296,3 +299,27 @@ The React console lives in `src/VeilGate.Web`. Its dev server proxies `/api` and
 - Menu items and pages follow the server's role rules, but the server checks every request itself.
 - Idle sign-out after 15 minutes, with a warning one minute before.
 - Dialogs trap keyboard focus, tabs work with the arrow keys, and there is a "skip to main content" link.
+
+### M5: users and invitations
+
+```
+GET   /api/v1/users ...                    list, search, filter by role and status           Tenant Admin only
+POST  /api/v1/users                        invite by email and role
+PATCH /api/v1/users/{id}                   change role                                        needs the second-factor check
+POST  /api/v1/users/{id}/disable           and /enable
+POST  /api/v1/users/{id}/invite/resend     a fresh link; every older link stops working
+POST  /api/v1/users/{id}/mfa/reset         remove their authenticator and recovery codes      needs the second-factor check
+GET   /api/v1/auth/invitations?token=...   show an invitation                                 no sign-in
+POST  /api/v1/users/accept-invite          choose a name and password                         no sign-in
+```
+
+- **The link.** An invitation works once and lasts 48 hours. Only a hash of its token is stored. A link that is unknown, used, expired or replaced always gets the same answer, so it tells a stranger nothing. The token travels in the query string, not the path, because the request log records the path and a token must never be logged.
+- **After accepting,** the person chooses a name and password and goes straight on to set up two-step sign-in, exactly as on a first sign-in.
+- **Rules.** Nobody can change, disable or reset their own account, the last active Tenant Admin is protected, and `PlatformAdmin` cannot be handed out. An email address can belong to only one account in the whole system, because sign-in finds a person by email alone.
+- **Signing people out.** Disabling someone or resetting their two-step sign-in ends all their sessions. Changing a role makes their old tokens stop working. A reset also removes their recovery codes and raises a security event.
+- **Email.** In Development the API sends to MailHog, which keeps every message in a local inbox at <http://localhost:8025> and sends nothing to the internet. The settings are `Smtp` and `Console:BaseUrl` in `appsettings.Development.json`; they have no defaults elsewhere, so a deployment that forgets them fails loudly instead of emailing links to `localhost`. If an email cannot be sent, the person is still invited and the admin can use "Resend invite".
+- **Apply the new migration** (`AddInvitations`) to your dev database:
+
+```bash
+dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
+```
