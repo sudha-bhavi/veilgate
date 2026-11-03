@@ -8,6 +8,7 @@ import {
   EVALUATION_ROLES,
   PLAYGROUND_ROLES,
   PROVIDER_ROLES,
+  USER_ADMIN_ROLES,
 } from "./auth/roles";
 import RequireAuth from "./auth/RequireAuth";
 import { rolesForPath } from "./auth/nav";
@@ -34,6 +35,8 @@ import EvaluationsPage from "./pages/EvaluationsPage";
 import EvaluationDetailPage from "./pages/EvaluationDetailPage";
 import EvaluationComparePage from "./pages/EvaluationComparePage";
 import AuditLogPage from "./pages/AuditLogPage";
+import UsersPage from "./pages/UsersPage";
+import AcceptInvitePage from "./pages/AcceptInvitePage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import { COMING_SOON } from "./pages/comingSoon";
 
@@ -53,6 +56,8 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/mfa" element={<MfaPage />} />
         <Route path="/mfa/enroll" element={<EnrollPage />} />
+        {/* The emailed invitation link: nobody is signed in yet */}
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
         <Route
           path="/forgot-password"
           element={<Placeholder title="Forgot password" />}
@@ -110,6 +115,12 @@ export default function App() {
         <Route element={<RequireAuth roles={AUDIT_ROLES} />}>
           <Route element={<AppShell />}>
             <Route path="/audit" element={<AuditLogPage />} />
+          </Route>
+        </Route>
+
+        <Route element={<RequireAuth roles={USER_ADMIN_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/users" element={<UsersPage />} />
           </Route>
         </Route>
 
