@@ -35,6 +35,8 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 - **My sessions.** Every signed-in person, whatever their role, can open **Security** in the console to see where they
   are signed in (device, IP address, when, last active), end a session they do not recognise, or sign out all other
   sessions. The IP address and browser are recorded when a session starts.
+- **Your own account.** The **MFA** tab shows your authenticator app and how many recovery codes are left, and replaces
+  them (after a fresh second-factor check). The **Password** tab changes your password and signs out your other devices.
 - **Security events.** The **Security events** tab lists failed sign-in lockouts, two-step resets, blocked leaks and API
   client problems. Tenant Admins and Security Officers see the whole organisation and can filter by person; everyone
   else sees only events about their own account.
@@ -150,6 +152,24 @@ An ended session can no longer renew its sign-in, so that device is signed out w
 at most `Auth__AccessTokenMinutes` (10 by default). The API does not yet check the session on every request, so an
 access token that was already issued keeps working until then. A demo session can look at the list but cannot end
 anything.
+
+**Two-step sign-in and password**
+
+Three calls for every signed-in person, always about themselves. No migration is needed.
+
+- `GET /api/v1/auth/mfa/factors` returns when the authenticator app was added (or `null`) and how many recovery codes are
+  left of how many.
+- `POST /api/v1/auth/mfa/recovery-codes/regenerate` replaces all recovery codes, used or not, and returns the 10 new ones
+  once. It needs a recent second-factor check. The old codes stop working at once.
+- `POST /api/v1/auth/password/change` with `{"currentPassword", "newPassword"}` returns `204`. A wrong current password is
+  `400 password.current_incorrect` and counts toward the account lockout (5 in a row lock it for 15 minutes). The new
+  password follows the same rules as at sign-up (12 to 128 characters) and must differ from the current one. On success
+  the person's other sessions end and their token version goes up, so every other device is signed out at once; the
+  device that made the change stays signed in and quietly renews its token.
+
+Each of these writes an audit event and a security event (Info), so they appear on the Security events tab. The
+authenticator app cannot be removed here, because it is the only second factor, and passkeys are not built yet. A demo
+session can look but not change anything.
 
 **Security events**
 
