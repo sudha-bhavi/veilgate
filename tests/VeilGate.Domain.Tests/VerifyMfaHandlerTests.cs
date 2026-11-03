@@ -98,6 +98,16 @@ public class VerifyMfaHandlerTests
     }
 
     [Fact]
+    public async Task A_completed_sign_in_stores_the_address_and_browser_on_the_new_session()
+    {
+        var (user, _, secret) = GivenEnrolledUser();
+
+        await Handler().HandleAsync(Cmd(user, CodeNow(secret)) with { Ip = "198.51.100.9", UserAgent = "Mozilla/5.0 Firefox/131" });
+
+        _sessions.Received(1).Add(Arg.Is<Session>(s => s.Ip == "198.51.100.9" && s.UserAgent == "Mozilla/5.0 Firefox/131"));
+    }
+
+    [Fact]
     public async Task A_wrong_code_is_rejected_counted_and_gets_no_token()
     {
         var (user, _, secret) = GivenEnrolledUser();

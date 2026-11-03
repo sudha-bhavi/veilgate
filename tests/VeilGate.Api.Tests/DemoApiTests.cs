@@ -234,6 +234,8 @@ public sealed class DemoApiTests : IDisposable
             (HttpMethod.Post, "/api/v1/api-clients", new { name = "x", scopes = new[] { "gateway:invoke" } }),
             (HttpMethod.Delete, $"/api/v1/api-clients/{Guid.NewGuid()}", null),
             (HttpMethod.Post, "/api/v1/auth/step-up", new { code = "123456" }),
+            (HttpMethod.Delete, $"/api/v1/auth/sessions/{Guid.NewGuid()}", null),
+            (HttpMethod.Post, "/api/v1/auth/logout-all", new { keepCurrent = true }),
         };
 
         foreach (var (method, path, body) in attempts)
@@ -242,6 +244,20 @@ public sealed class DemoApiTests : IDisposable
             response.StatusCode.Should().Be(HttpStatusCode.Forbidden, $"{method} {path}");
             Code(await Json(response)).Should().Be("demo.read_only", $"{method} {path}");
         }
+    }
+
+    [Fact]
+    public async Task A_demo_visitor_can_see_their_sessions_with_the_current_one_marked()
+    {
+        await SeedDemoUser(await SeedTenant());
+        var (_, client) = Api(demoEnabled: true);
+        var (token, _) = await StartDemo(client);
+
+        var response = await Send(client, HttpMethod.Get, "/api/v1/auth/sessions", token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var rows = (await Json(response)).EnumerateArray().ToList();
+        rows.Should().ContainSingle().Which.GetProperty("current").GetBoolean().Should().BeTrue();
     }
 
     [Fact]

@@ -13,5 +13,8 @@ public interface ISessionRepository
 
     Task<List<Session>> ListActiveForUserAsync(Guid userId, DateTimeOffset now, CancellationToken ct);
 
+    /// <summary>One of this user's own sessions by id, or null. Someone else's session is null too, so its existence is not revealed.</summary>
+    Task<Session?> FindForUserAsync(Guid sessionId, Guid userId, CancellationToken ct);
+
     Task SaveChangesAsync(CancellationToken ct);
 }

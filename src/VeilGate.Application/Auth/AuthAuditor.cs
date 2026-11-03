@@ -17,6 +17,12 @@ public sealed class AuthAuditor(IAuditWriter audit, ISecurityEventWriter securit
     public const string MfaEnroll = "auth.mfa_enroll";
     public const string StepUp = "auth.step_up";
     public const string DemoSignIn = "auth.demo_login";
+    public const string SessionRevoke = "auth.session_revoke";
+    public const string LogoutAll = "auth.logout_all";
+
+    /// <summary>The person ended some of their own sessions. "count" is how many.</summary>
+    public Task SessionsEndedAsync(Guid tenantId, Guid userId, string action, string? ip, int count, CancellationToken ct) =>
+        WriteAsync(tenantId, userId, action, "success", ip, new Dictionary<string, string> { ["count"] = count.ToString() }, ct);
 
     /// <param name="method">How the second factor was proved ("otp" or "recovery"), when there was one.</param>
     public Task SucceededAsync(Guid tenantId, Guid userId, string action, string? ip, string? method, CancellationToken ct) =>

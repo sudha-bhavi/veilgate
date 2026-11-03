@@ -52,7 +52,7 @@ public sealed class MfaController(
     {
         if (!TryGetIdentity(out var userId, out var tenantId, out var version)) return Fail(InvalidToken);
 
-        var result = await verify.HandleAsync(new VerifyMfaCommand(userId, tenantId, version, request.Code, CallerIp), ct);
+        var result = await verify.HandleAsync(new VerifyMfaCommand(userId, tenantId, version, request.Code, CallerIp, CallerUserAgent), ct);
         if (result.IsFailure) return Fail(result.Error);
         RefreshCookie.Write(Response, result.Value.RefreshToken, result.Value.RefreshExpiresAt);
         return Ok(new

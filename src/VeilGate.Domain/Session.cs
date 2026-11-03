@@ -21,11 +21,16 @@ public sealed class Session : TenantEntity
     public DateTimeOffset? RevokedAt { get; private set; }
     public string? RevokeReason { get; private set; }
         public bool IsDemo { get; private set; }
+    public string? Ip { get; private set; }          // where the sign-in came from, for the Security page
+    public string? UserAgent { get; private set; }   // the browser's own description, cut to MaxUserAgentLength
+
+    public const int MaxUserAgentLength = 256;
 
     public static readonly Error RefreshInvalid = Error.Unauthorized("auth.refresh_invalid", "Sign in again.");
     public static readonly Error RefreshReused = Error.Unauthorized("auth.refresh_reused", "Sign in again.");
 
-        public static Result<Session> Start(Guid tenantId, Guid userId, string refreshHash, DateTimeOffset now, bool demo = false)
+        public static Result<Session> Start(Guid tenantId, Guid userId, string refreshHash, DateTimeOffset now, bool demo = false,
+        string? ip = null, string? userAgent = null)
     {
         if (tenantId == Guid.Empty) return Error.Validation("validation.failed", "Tenant is required.");
         if (userId == Guid.Empty) return Error.Validation("validation.failed", "User is required.");
@@ -37,7 +42,9 @@ public sealed class Session : TenantEntity
             CurrentRefreshHash = refreshHash,
             LastSeenAt = now,
             ExpiresAt = now + (demo ? DemoTimeout : AbsoluteTimeout),
-            IsDemo = demo
+            IsDemo = demo,
+            Ip = CleanIp(ip),
+            UserAgent = CleanUserAgent(userAgent)
         };
         s.SetTenant(tenantId);
         return s;
@@ -78,6 +85,17 @@ public sealed class Session : TenantEntity
         if (RevokedAt is not null) return;   // keep the first reason
         RevokedAt = now;
         RevokeReason = reason;
+    }
+
+    // Context for display only, so a bad value is dropped rather than refusing the sign-in.
+    private static string? CleanIp(string? ip) =>
+        System.Net.IPAddress.TryParse(ip, out var parsed) ? parsed.ToString() : null;
+
+    private static string? CleanUserAgent(string? userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(userAgent)) return null;
+        var trimmed = userAgent.Trim();
+        return trimmed.Length <= MaxUserAgentLength ? trimmed : trimmed[..MaxUserAgentLength];
     }
 
     private static bool IsHash(string? h) => h is { Length: 64 } && h.All(char.IsAsciiHexDigitLower);

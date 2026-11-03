@@ -29,7 +29,6 @@ export type NavItem = {
 };
 
 const ADMIN = ["TenantAdmin"];
-const OVERSIGHT = ["TenantAdmin", "SecurityOfficer"];
 
 // Which role sees which link. This only decides what to show; the server checks every request.
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -82,7 +81,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     roles: AUDIT_ROLES,
   },
   { label: "Users", path: "/users", icon: Users, roles: ADMIN },
-  { label: "Security", path: "/security", icon: Lock, roles: OVERSIGHT },
+  { label: "Security", path: "/security", icon: Lock, roles: ALL_TENANT_ROLES },
   { label: "Settings", path: "/settings", icon: Settings, roles: ADMIN },
 ];
 

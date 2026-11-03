@@ -7,8 +7,10 @@ namespace VeilGate.Application.Auth;
 
 /// <param name="TokenVersion">The "ver" claim from the temporary MFA token. Must still match the user's current version.</param>
 /// <param name="Code">Either the 6-digit code from the authenticator app, or a one-time recovery code.</param>
-/// <param name="Ip">The caller's address, for the audit log only.</param>
-public sealed record VerifyMfaCommand(Guid UserId, Guid TenantId, int TokenVersion, string Code, string? Ip = null);
+/// <param name="Ip">The caller's address, for the audit log and the session list.</param>
+/// <param name="UserAgent">The browser's description, kept on the session so the person can recognise their devices.</param>
+public sealed record VerifyMfaCommand(
+    Guid UserId, Guid TenantId, int TokenVersion, string Code, string? Ip = null, string? UserAgent = null);
 
 public sealed record VerifyMfaResult(string AccessToken, string RefreshToken, DateTimeOffset RefreshExpiresAt);
 
@@ -80,7 +82,7 @@ public sealed class VerifyMfaHandler(
 
         // Sign-in is complete, so this device gets a session. The browser keeps the raw token; we store only its hash.
         var refreshToken = RefreshTokens.Generate();
-        var session = Session.Start(user.TenantId, user.Id, RefreshTokens.Hash(refreshToken), now).Value;
+        var session = Session.Start(user.TenantId, user.Id, RefreshTokens.Hash(refreshToken), now, ip: cmd.Ip, userAgent: cmd.UserAgent).Value;
         sessions.Add(session);
 
         // All repositories share one DbContext per request, so this one save writes the user, factor and session together.

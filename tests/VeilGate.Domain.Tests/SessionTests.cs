@@ -31,6 +31,33 @@ public class SessionTests
         s.IsActive(Now).Should().BeTrue();
     }
 
+    [Fact]
+    public void Start_records_the_address_and_browser()
+    {
+        var s = Session.Start(Tenant, User, NewHash(), Now, ip: "203.0.113.7", userAgent: "  Mozilla/5.0 Chrome/130  ").Value;
+
+        s.Ip.Should().Be("203.0.113.7");
+        s.UserAgent.Should().Be("Mozilla/5.0 Chrome/130");
+    }
+
+    [Fact]
+    public void Start_keeps_no_address_or_browser_when_none_is_given()
+    {
+        var (s, _) = StartSession();
+
+        s.Ip.Should().BeNull();
+        s.UserAgent.Should().BeNull();
+    }
+
+    [Fact]
+    public void Start_drops_an_address_that_is_not_valid_and_cuts_a_long_browser_string()
+    {
+        var s = Session.Start(Tenant, User, NewHash(), Now, ip: "not-an-ip", userAgent: new string('a', 500)).Value;
+
+        s.Ip.Should().BeNull();
+        s.UserAgent.Should().HaveLength(Session.MaxUserAgentLength);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("abc")]

@@ -173,4 +173,37 @@ public class SessionRepositoryTests(PostgresFixture pg)
 
         (await new SessionRepository(check).FindByRefreshHashAsync(hash, default))!.IsDemo.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task The_address_and_browser_survive_a_round_trip_through_the_database()
+    {
+        var (t, u) = await SeedUser();
+        var hash = NewHash();
+        var session = Session.Start(t.Id, u.Id, hash, Now, ip: "203.0.113.7", userAgent: "Mozilla/5.0 Chrome/130").Value;
+        await using (var db = AppContext(t.Id))
+        {
+            var repo = new SessionRepository(db);
+            repo.Add(session);
+            await repo.SaveChangesAsync(default);
+        }
+
+        await using var check = AppContext(t.Id);
+        var found = await new SessionRepository(check).FindByRefreshHashAsync(hash, default);
+
+        found!.Ip.Should().Be("203.0.113.7");
+        found.UserAgent.Should().Be("Mozilla/5.0 Chrome/130");
+    }
+
+    [Fact]
+    public async Task A_session_is_found_for_its_owner_only()
+    {
+        var (t, u) = await SeedUser();
+        var saved = await SaveSession(t, u, NewHash());
+
+        await using var db = AppContext(t.Id);
+        var repo = new SessionRepository(db);
+
+        (await repo.FindForUserAsync(saved.Id, u.Id, default))!.Id.Should().Be(saved.Id);
+        (await repo.FindForUserAsync(saved.Id, Guid.NewGuid(), default)).Should().BeNull();
+    }
 }

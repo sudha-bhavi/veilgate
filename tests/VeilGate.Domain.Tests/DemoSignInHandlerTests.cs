@@ -62,6 +62,16 @@ public class DemoSignInHandlerTests
     }
 
     [Fact]
+    public async Task The_session_keeps_the_address_and_browser()
+    {
+        GivenDemoUser();
+
+        await Handler().HandleAsync(new DemoSignInCommand(Email, "203.0.113.5", "Mozilla/5.0 Safari/605"));
+
+        _sessions.Received(1).Add(Arg.Is<Session>(s => s.Ip == "203.0.113.5" && s.UserAgent == "Mozilla/5.0 Safari/605"));
+    }
+
+    [Fact]
     public async Task It_is_audited_with_the_method_demo()
     {
         var user = GivenDemoUser();

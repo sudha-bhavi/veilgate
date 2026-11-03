@@ -15,6 +15,13 @@ describe("navFor", () => {
     }
   });
 
+  it("shows Security to every tenant role, because it is each person's own account", () => {
+    for (const role of ["TenantAdmin", "SecurityOfficer", "Developer", "Auditor"]) {
+      expect(labels(role)).toContain("Security");
+    }
+    expect(labels("Stranger")).not.toContain("Security");
+  });
+
   it("shows Users only to the tenant admin", () => {
     expect(labels("TenantAdmin")).toContain("Users");
     expect(labels("Developer")).not.toContain("Users");

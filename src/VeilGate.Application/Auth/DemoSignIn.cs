@@ -5,8 +5,9 @@ using VeilGate.Domain.Common;
 namespace VeilGate.Application.Auth;
 
 /// <param name="DemoUserEmail">The one seeded demo user, from configuration. Never taken from the request.</param>
-/// <param name="Ip">The caller's address, for the audit log only.</param>
-public sealed record DemoSignInCommand(string DemoUserEmail, string? Ip = null);
+/// <param name="Ip">The caller's address, for the audit log and the session list.</param>
+/// <param name="UserAgent">The browser's description, kept on the session.</param>
+public sealed record DemoSignInCommand(string DemoUserEmail, string? Ip = null, string? UserAgent = null);
 
 public sealed record DemoSignInResult(string AccessToken, string RefreshToken, DateTimeOffset RefreshExpiresAt);
 
@@ -38,7 +39,7 @@ public sealed class DemoSignInHandler(
 
         var now = clock.UtcNow;
         var refreshToken = RefreshTokens.Generate();
-        var session = Session.Start(user.TenantId, user.Id, RefreshTokens.Hash(refreshToken), now, demo: true).Value;
+        var session = Session.Start(user.TenantId, user.Id, RefreshTokens.Hash(refreshToken), now, demo: true, ip: cmd.Ip, userAgent: cmd.UserAgent).Value;
         sessions.Add(session);
         await sessions.SaveChangesAsync(ct);
         await auditor.SucceededAsync(user.TenantId, user.Id, AuthAuditor.DemoSignIn, cmd.Ip, Method, ct);
