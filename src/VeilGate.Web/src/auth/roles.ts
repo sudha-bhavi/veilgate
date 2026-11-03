@@ -22,5 +22,8 @@ export const EVALUATION_ROLES = [
 // Mirrors the server's AuditReader policy.
 export const AUDIT_ROLES = ["TenantAdmin", "SecurityOfficer", "Auditor"] as const;
 
+// Mirrors the server's SecurityOversight policy: these roles see security events of the whole organization and may filter by person.
+export const SECURITY_OVERSIGHT_ROLES = ["TenantAdmin", "SecurityOfficer"] as const;
+
 // Mirrors the server's UserAdmin policy.
 export const USER_ADMIN_ROLES = ["TenantAdmin"] as const;
