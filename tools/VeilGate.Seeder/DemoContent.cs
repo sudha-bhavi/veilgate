@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using VeilGate.Application.Evaluation;
 using VeilGate.Application.Policies;
@@ -28,6 +29,7 @@ public static class DemoContent
 
         await EnsureApiClientAsync(db, tenant, admin, published);
         await EnsureEvaluationAsync(db, tenant, admin, published);
+        await EnsureDemoUserAsync(db, tenant, now);
     }
 
     private static async Task<Policy> EnsurePolicyAsync(
@@ -114,5 +116,28 @@ public static class DemoContent
         db.EvalRuns.Add(run);
         await db.SaveChangesAsync();
         Console.WriteLine("queued an evaluation run: start the worker and it finishes in a few seconds");
+    }
+
+    /// <summary>
+    /// The person the "Try the demo" button signs a visitor in as. A Security Officer, never an administrator: they can see
+    /// policies, evaluations and the audit log, but not users, providers or API clients. Their password is random and thrown
+    /// away, so nobody can sign in as them with a password, and they have no authenticator. Only the demo button reaches them,
+    /// and that button is off unless the API is started with Demo__Enabled=true.
+    /// </summary>
+    private static async Task EnsureDemoUserAsync(VeilGateDbContext db, Tenant tenant, DateTimeOffset now)
+    {
+        const string email = "demo@acme.test";
+        if (await db.Users.AnyAsync(u => u.Email == email))
+        {
+            Console.WriteLine($"already there: {email}");
+            return;
+        }
+
+        var user = User.Invite(tenant.Id, email, "Demo Visitor", UserRole.SecurityOfficer, now).Value;
+        var unusablePassword = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        user.AcceptInvitation(new Argon2PasswordHasher().Hash(unusablePassword), now);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        Console.WriteLine($"created demo user: {email} (Security Officer, no usable password). Start the API with Demo__Enabled=true to show the button.");
     }
 }
