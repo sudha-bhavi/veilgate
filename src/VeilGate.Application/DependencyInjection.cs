@@ -18,6 +18,9 @@ public static class DependencyInjection
         services.AddScoped<Auth.ListMySessionsHandler>();
         services.AddScoped<Auth.RevokeMySessionHandler>();
         services.AddScoped<Auth.LogoutAllHandler>();
+        services.AddScoped<Auth.ChangePasswordHandler>();
+        services.AddScoped<Auth.GetMfaStatusHandler>();
+        services.AddScoped<Auth.RegenerateRecoveryCodesHandler>();
         services.AddScoped<Auth.AuthAuditor>();
         services.AddScoped<Detection.IDetectionPipeline, Detection.DetectionPipeline>();
         services.AddScoped<Policies.IPolicyEngine, Policies.PolicyEngine>();
