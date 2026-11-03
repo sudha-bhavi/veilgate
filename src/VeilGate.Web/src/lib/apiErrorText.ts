@@ -7,6 +7,8 @@ export function describeApiError(error: unknown): string {
       ? `Too many requests. Try again in ${error.retryAfter} seconds.`
       : "Too many requests. Wait a moment and try again.";
   }
+  if (error.code === "demo.read_only")
+    return "The demo is read-only: you can look around and try the Playground, but not change anything.";
   if (error.status === 403) return "Your role is not allowed to do this.";
   const fields = error.errors
     ? Object.values(error.errors)

@@ -7,8 +7,8 @@ import Where from "../test/Where";
 import { resetSessionForTests, setAccessToken } from "../lib/session";
 import AppShell from "./AppShell";
 
-function renderShell(role: string) {
-  setAccessToken(fakeToken({ role }));
+function renderShell(role: string, claims: Record<string, unknown> = {}) {
+  setAccessToken(fakeToken({ role, ...claims }));
   return render(
     <MemoryRouter initialEntries={["/dashboard"]}>
       <Routes>
@@ -62,5 +62,15 @@ describe("AppShell", () => {
       screen.getByRole("link", { name: "Skip to main content" }),
     ).toHaveAttribute("href", "#main-content");
     expect(document.getElementById("main-content")).not.toBeNull();
+  });
+
+  it("tells a demo visitor that the demo is read-only", () => {
+    renderShell("SecurityOfficer", { amr: ["demo"] });
+    expect(screen.getByText(/You are in the demo/)).toBeInTheDocument();
+  });
+
+  it("shows no demo banner for an ordinary sign-in", () => {
+    renderShell("SecurityOfficer");
+    expect(screen.queryByText(/You are in the demo/)).not.toBeInTheDocument();
   });
 });
