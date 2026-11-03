@@ -12,6 +12,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using VeilGate.Domain.Evaluation;
+using VeilGate.Domain.Messaging;
 
 namespace VeilGate.Infrastructure.Persistence;
 
@@ -37,6 +38,7 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<EvalRun> EvalRuns => Set<EvalRun>();
     public DbSet<EvalLeak> EvalRunLeaks => Set<EvalLeak>();
         public DbSet<Invitation> Invitations => Set<Invitation>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.HasPostgresExtension("citext");
@@ -565,6 +567,33 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
             e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<EvalRun>().WithMany().HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.RunId).HasDatabaseName("ix_eval_run_leaks_run");
+        });
+
+        b.Entity<OutboxMessage>(e =>
+        {
+            e.ToTable("outbox_messages");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.Topic).HasColumnName("topic").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Key).HasColumnName("key").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Payload).HasColumnName("payload").HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.Headers).HasColumnName("headers").HasColumnType("jsonb").IsRequired()
+                .HasConversion(PostgresConverters.Details, PostgresConverters.DetailsComparer);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.SentAt).HasColumnName("sent_at");
+            e.Property(x => x.Attempts).HasColumnName("attempts");
+            e.Property(x => x.NextAttemptAt).HasColumnName("next_attempt_at");
+            e.Property(x => x.LastErrorCode).HasColumnName("last_error_code").HasMaxLength(100);
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            // The publisher polls for unsent messages that are due. Sent rows drop out of this index.
+            e.HasIndex(x => x.NextAttemptAt).HasDatabaseName("ix_outbox_unsent").HasFilter("sent_at is null");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_outbox_topic", "topic in ('vg.gateway.requests.v1')");
+                t.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
+            });
         });
     }
 }
