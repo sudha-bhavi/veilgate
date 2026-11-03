@@ -55,6 +55,19 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next)
                 await Reject(ctx);
                 return;
             }
+
+            // The token points at a session. If that session was ended (sign-out, revoke, "sign out all others", password change)
+            // the token stops working at once instead of living out its few minutes. A "sid" with no session row is let through,
+            // like an unknown API client above: a forged token already fails the signature check, and every real one has a row.
+            if (Guid.TryParse(ctx.User.FindFirst("sid")?.Value, out var sessionId))
+            {
+                var session = await ctx.RequestServices.GetRequiredService<ISessionRepository>().GetStateAsync(sessionId, ctx.RequestAborted);
+                if (session is not null && session.IsEnded(ctx.RequestServices.GetRequiredService<IClock>().UtcNow))
+                {
+                    await Reject(ctx);
+                    return;
+                }
+            }
         }
         await next(ctx);
     }

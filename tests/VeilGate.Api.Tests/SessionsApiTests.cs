@@ -222,6 +222,77 @@ public sealed class SessionsApiTests : IDisposable
         (await Reload(foreign.Id)).RevokedAt.Should().BeNull();
     }
 
+    // ---------------------------------------------------------------- an ended session stops working at once
+
+    [Fact]
+    public async Task A_session_that_was_ended_from_another_device_is_refused_on_its_very_next_request()
+    {
+        var user = await SeedUser(await SeedTenant());
+        var mine = await SeedSession(user);
+        var phone = await SeedSession(user);
+        var phoneToken = TokenFor(user, phone);
+        (await Send(HttpMethod.Get, "/api/v1/auth/sessions", phoneToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await Send(HttpMethod.Delete, $"/api/v1/auth/sessions/{phone.Id}", TokenFor(user, mine));
+
+        var refused = await Send(HttpMethod.Get, "/api/v1/auth/sessions", phoneToken);
+        refused.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        Code(await Json(refused)).Should().Be("auth.token_invalid");
+        (await Send(HttpMethod.Get, "/api/v1/auth/sessions", TokenFor(user, mine))).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Signing_out_all_other_sessions_stops_their_tokens_at_once_and_keeps_this_one()
+    {
+        var user = await SeedUser(await SeedTenant());
+        var mine = await SeedSession(user);
+        var a = await SeedSession(user);
+        var b = await SeedSession(user);
+
+        await Send(HttpMethod.Post, "/api/v1/auth/logout-all", TokenFor(user, mine), new { keepCurrent = true });
+
+        (await Send(HttpMethod.Get, "/api/v1/auth/sessions", TokenFor(user, a))).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await Send(HttpMethod.Get, "/api/v1/auth/sessions", TokenFor(user, b))).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await Send(HttpMethod.Get, "/api/v1/auth/sessions", TokenFor(user, mine))).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Signing_out_everywhere_stops_this_devices_token_too()
+    {
+        var user = await SeedUser(await SeedTenant());
+        var mine = await SeedSession(user);
+        var token = TokenFor(user, mine);
+
+        await Send(HttpMethod.Post, "/api/v1/auth/logout-all", token, new { keepCurrent = false });
+
+        (await Send(HttpMethod.Get, "/api/v1/auth/sessions", token)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Ending_a_session_never_affects_another_persons_session()
+    {
+        var tenantId = await SeedTenant();
+        var user = await SeedUser(tenantId);
+        var stranger = await SeedUser(tenantId);
+        var mine = await SeedSession(user);
+        var theirs = await SeedSession(stranger);
+
+        await Send(HttpMethod.Post, "/api/v1/auth/logout-all", TokenFor(user, mine), new { keepCurrent = false });
+
+        (await Send(HttpMethod.Get, "/api/v1/auth/sessions", TokenFor(stranger, theirs))).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task A_token_for_a_session_that_has_no_record_is_still_accepted()
+    {
+        // Same as an unknown API client: a forged token fails its signature, so a signed token with no row is not turned away here.
+        var user = await SeedUser(await SeedTenant());
+        var token = _baseFactory.Services.GetRequiredService<ITokenService>().IssueAccessToken(
+            new AccessTokenClaims(user.Id, user.TenantId, user.Role.ToString(), Guid.NewGuid(), ["pwd", "otp"], DateTimeOffset.UtcNow, user.TokenVersion));
+
+        (await Send(HttpMethod.Get, "/api/v1/auth/sessions", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     // ---------------------------------------------------------------- sign out all others
 
     [Fact]
