@@ -431,7 +431,31 @@ step is the outbox: a table that holds each message until a worker has sent it.
 - **What a message holds.** A topic, a key (the tenant id, so one tenant's messages stay in order), a JSON payload and the headers
   `messageId`, `tenantId`, `schemaVersion` and, when there is one, `traceparent`. Like the audit log it never holds content.
 - **Access.** The app role can read and add messages of its own tenant only. It cannot update or delete them; the publisher
-  will do that through a narrow database function.
+  does that through four narrow database functions (`outbox_claim_due`, `outbox_mark_sent`, `outbox_mark_failed`, `outbox_mark_dead`).
+
+### M6: the publisher
+
+A worker (`OutboxPublisherWorker`) sends outbox messages to Kafka. It talks to an `IEventTransport`, so the broker can be swapped
+for the in-memory stand-in with `Messaging:Transport` set to `InMemory`.
+
+- **Claiming with a lease.** The worker takes due messages with `FOR UPDATE SKIP LOCKED`, so two workers never take the same row.
+  Because the lock ends when the database call ends, a claim also counts the attempt and moves `next_attempt_at` 60 seconds ahead.
+  If a worker dies after claiming, the lease runs out and the message is tried again.
+- **Retries.** A failed send waits 2, 4, 8, 16 seconds and so on, up to 5 minutes, and stores the kind of error in `last_error_code`.
+- **Dead letters.** After 5 failed attempts the message is copied to `<topic>.dlq` with the headers `x-error` and `x-attempts`, and
+  the row is finished. If the dead-letter topic is also unreachable, the message stays in the outbox.
+- **Delivery is at least once.** If the worker dies after Kafka accepted a message but before the row was marked sent, the message
+  is sent again. Consumers must ignore repeats; the `messageId` header identifies a message.
+- **Kafka settings.** `acks=all` and an idempotent producer, so a retry inside the producer never stores a message twice.
+- **Running it.** Start the broker and create the topics, then the worker:
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file .env up -d kafka kafka-init
+DOTNET_ENVIRONMENT=Development dotnet run --project src/VeilGate.Workers
+```
+
+  To watch a topic: `docker compose -f deploy/docker-compose.yml --env-file .env exec kafka rpk topic consume vg.gateway.requests.v1 --offset end`.
+  The worker reaches Kafka at `localhost:19092`; containers use `kafka:9092`.
 
 ### Decisions
 
@@ -444,3 +468,11 @@ Where this project departs from the design documents (which were drafted with AI
 - **`last_error_code`.** `outbox_messages` has one extra column that the documents do not list. It holds only the kind of error
   from the last failed send, never message content.
 - **Evaluations** keep using the `eval_runs` table as their queue. Moving them onto Kafka is optional and comes last.
+- **Two Kafka listeners.** The documents give one address. A process on the host cannot resolve the Docker name `kafka`, so
+  Redpanda has a second listener, `localhost:19092`, for it.
+- **Dead-lettered rows.** A row with `sent_at` set and `last_error_code` filled in was moved to the dead-letter topic. This avoids
+  a status column the documents do not have.
+- **Order on retry.** Messages with the same key are published in creation order, but a retried message can arrive after a later
+  one. The metrics consumer does not depend on order.
+- **Fixed limits.** The 5 attempts, 60-second lease and 5-minute backoff cap are my choices; the documents only give the cap.
+  All are settings under `Outbox`.

@@ -197,4 +197,73 @@ public static class RlsMigrationExtensions
         REVOKE ALL ON FUNCTION auth_find_invitation_tenant(varchar) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION auth_find_invitation_tenant(varchar) TO vg_app;
         """);
+
+    /// <summary>
+    /// The outbox publisher works across every tenant and has none set, and the app role may only read and add rows. So it takes
+    /// work through four narrow SECURITY DEFINER doors. "Claiming" does not hold a lock while the message is being sent; it
+    /// counts the attempt and pushes next_attempt_at into the future (a lease). If the publisher crashes, the lease runs out and
+    /// the message is claimed again. A message that is sent is marked sent; one that keeps failing is marked dead, after the
+    /// publisher has put it on the .dlq topic (sent_at set with last_error_code kept means "dead-lettered").
+    /// </summary>
+    public static void CreateOutboxFunctions(this MigrationBuilder mb) => mb.Sql("""
+        DROP FUNCTION IF EXISTS outbox_claim_due(int, int);
+        CREATE FUNCTION outbox_claim_due(p_limit int, p_lease_seconds int)
+        RETURNS TABLE (msg_id uuid, msg_tenant_id uuid, msg_topic varchar, msg_key varchar, msg_payload text,
+                       msg_headers text, msg_attempts int, msg_created_at timestamptz)
+        LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+            UPDATE outbox_messages m
+            SET attempts = m.attempts + 1, next_attempt_at = now() + make_interval(secs => p_lease_seconds)
+            WHERE m.id IN (
+                SELECT q.id FROM outbox_messages q
+                WHERE q.sent_at IS NULL AND q.next_attempt_at <= now()
+                ORDER BY q.next_attempt_at, q.id
+                FOR UPDATE SKIP LOCKED
+                LIMIT p_limit)
+            RETURNING m.id, m.tenant_id, m.topic, m.key, m.payload::text, m.headers::text, m.attempts, m.created_at
+        $$;
+
+        DROP FUNCTION IF EXISTS outbox_mark_sent(uuid);
+        CREATE FUNCTION outbox_mark_sent(p_id uuid)
+        RETURNS void
+        LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+            UPDATE outbox_messages SET sent_at = now(), last_error_code = NULL WHERE id = p_id AND sent_at IS NULL
+        $$;
+
+        DROP FUNCTION IF EXISTS outbox_mark_failed(uuid, varchar, int);
+        CREATE FUNCTION outbox_mark_failed(p_id uuid, p_error varchar, p_backoff_cap_seconds int)
+        RETURNS void
+        LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+            UPDATE outbox_messages
+            SET last_error_code = left(p_error, 100),
+                next_attempt_at = now() + make_interval(secs => least(p_backoff_cap_seconds, power(2, attempts)))
+            WHERE id = p_id AND sent_at IS NULL
+        $$;
+
+        DROP FUNCTION IF EXISTS outbox_mark_dead(uuid, varchar);
+        CREATE FUNCTION outbox_mark_dead(p_id uuid, p_error varchar)
+        RETURNS void
+        LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+            UPDATE outbox_messages SET sent_at = now(), last_error_code = left(p_error, 100) WHERE id = p_id AND sent_at IS NULL
+        $$;
+
+        REVOKE ALL ON FUNCTION outbox_claim_due(int, int) FROM PUBLIC;
+        REVOKE ALL ON FUNCTION outbox_mark_sent(uuid) FROM PUBLIC;
+        REVOKE ALL ON FUNCTION outbox_mark_failed(uuid, varchar, int) FROM PUBLIC;
+        REVOKE ALL ON FUNCTION outbox_mark_dead(uuid, varchar) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION outbox_claim_due(int, int) TO vg_app;
+        GRANT EXECUTE ON FUNCTION outbox_mark_sent(uuid) TO vg_app;
+        GRANT EXECUTE ON FUNCTION outbox_mark_failed(uuid, varchar, int) TO vg_app;
+        GRANT EXECUTE ON FUNCTION outbox_mark_dead(uuid, varchar) TO vg_app;
+        """);
+
+    public static void DropOutboxFunctions(this MigrationBuilder mb) => mb.Sql("""
+        DROP FUNCTION IF EXISTS outbox_claim_due(int, int);
+        DROP FUNCTION IF EXISTS outbox_mark_sent(uuid);
+        DROP FUNCTION IF EXISTS outbox_mark_failed(uuid, varchar, int);
+        DROP FUNCTION IF EXISTS outbox_mark_dead(uuid, varchar);
+        """);
 }

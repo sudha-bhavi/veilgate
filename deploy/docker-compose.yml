@@ -32,9 +32,20 @@ services:
     command: >
       redpanda start --overprovisioned --smp 1 --memory 512M --reserve-memory 0M
       --node-id 0 --check=false
-      --kafka-addr PLAINTEXT://0.0.0.0:9092
-      --advertise-kafka-addr PLAINTEXT://kafka:9092
-    ports: ["9092:9092"]
+      --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      --advertise-kafka-addr internal://kafka:9092,external://localhost:19092
+    ports: ["9092:9092", "19092:19092"]
+
+  # Creates the topics once and exits. Safe to run again: a topic that already exists is left alone.
+  kafka-init:
+    image: redpandadata/redpanda:v24.2.7
+    depends_on: [kafka]
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until rpk -X brokers=kafka:9092 cluster info >/dev/null 2>&1; do sleep 1; done
+        rpk -X brokers=kafka:9092 topic create vg.gateway.requests.v1 vg.gateway.requests.v1.dlq -p 3 || true
 
   mailhog:
     image: mailhog/mailhog:v1.0.1
