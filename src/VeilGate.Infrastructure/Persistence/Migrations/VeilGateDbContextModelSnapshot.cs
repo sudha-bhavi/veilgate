@@ -680,6 +680,75 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("VeilGate.Domain.Messaging.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Headers")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("headers");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("last_error_code");
+
+                    b.Property<DateTimeOffset>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Topic")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("topic");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NextAttemptAt")
+                        .HasDatabaseName("ix_outbox_unsent")
+                        .HasFilter("sent_at is null");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("outbox_messages", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
+
+                            t.HasCheckConstraint("ck_outbox_topic", "topic in ('vg.gateway.requests.v1')");
+                        });
+                });
+
             modelBuilder.Entity("VeilGate.Domain.MfaFactor", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1448,6 +1517,15 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("VeilGate.Domain.LlmProviders.LlmProvider", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Messaging.OutboxMessage", b =>
                 {
                     b.HasOne("VeilGate.Domain.Tenant", null)
                         .WithMany()

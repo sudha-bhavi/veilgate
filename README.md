@@ -66,7 +66,7 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 | M4        | Policy workflow, API clients, LLM providers, evaluations, step-up check                             | ✅ Done |
 | M5        | React console: sign-in, playground, policies, API clients, providers, evaluations, audit log, users | ✅ Done |
 | M5+       | Security page, read-only demo, invitations                                                          | ✅ Done |
-| M6        | Kafka outbox, workers, dashboards                                                                   |         |
+| M6        | Kafka outbox, workers, dashboards                                                                   | 🚧 In progress |
 | M7        | Hardening, pen test, deployment                                                                     |         |
 
 In the console, Dashboard, Requests and Settings are marked "Not built yet": their server side is not written.
@@ -420,3 +420,27 @@ POST  /api/v1/users/accept-invite          choose a name and password           
 ```bash
 dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
 ```
+
+### M6: the outbox (in progress)
+
+Gateway events will travel through Kafka (Redpanda locally) to a worker that fills the Dashboard and Requests pages. The first
+step is the outbox: a table that holds each message until a worker has sent it.
+
+- **Why an outbox.** A request's work and its message must not drift apart. `IOutbox.Enqueue` adds the message to the same
+  database transaction as the work, so both are saved or neither is. A separate worker sends the message afterwards.
+- **What a message holds.** A topic, a key (the tenant id, so one tenant's messages stay in order), a JSON payload and the headers
+  `messageId`, `tenantId`, `schemaVersion` and, when there is one, `traceparent`. Like the audit log it never holds content.
+- **Access.** The app role can read and add messages of its own tenant only. It cannot update or delete them; the publisher
+  will do that through a narrow database function.
+
+### Decisions
+
+Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
+
+- **Transport.** The documents assume Kafka throughout. Here the code talks to an event transport interface, so Kafka can be
+  swapped out without touching the gateway.
+- **One topic first.** Only `vg.gateway.requests.v1` is allowed in the outbox for now. Audit and security events are not sent
+  through Kafka yet; more topics get their own migration when they are used.
+- **`last_error_code`.** `outbox_messages` has one extra column that the documents do not list. It holds only the kind of error
+  from the last failed send, never message content.
+- **Evaluations** keep using the `eval_runs` table as their queue. Moving them onto Kafka is optional and comes last.
