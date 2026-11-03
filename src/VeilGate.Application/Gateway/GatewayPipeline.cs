@@ -9,6 +9,7 @@ using VeilGate.Application.Transformation;
 using VeilGate.Domain.Audit;
 using VeilGate.Domain.Common;
 using VeilGate.Domain.Detection;
+using VeilGate.Domain.Messaging;
 using VeilGate.Domain.Policies;
 using VeilGate.Domain.Vault;
 
@@ -25,6 +26,7 @@ public sealed class GatewayPipeline(
     IPolicyResolver policies,
     IAuditWriter audit,
     ISecurityEventWriter securityEvents,
+    IOutbox outbox,
     IClock clock,
     ILogger<GatewayPipeline> logger) : IGatewayPipeline
 {
@@ -35,9 +37,10 @@ public sealed class GatewayPipeline(
     public async Task<Result<DetectOutput>> DetectAsync(GatewayCaller caller, string text, double minConfidence, CancellationToken ct = default)
     {
         var requestId = NewRequestId();
+        var timer = Stopwatch.StartNew();
         var found = await detection.DetectAsync(TextNormalizer.Normalize(text), new DetectionContext { MinConfidence = minConfidence }, ct);
 
-        await AuditAsync(caller, "gateway.detect", requestId, "success", EntityDetails(found.Select(e => e.Type)), ct);
+        await AuditAsync(caller, "gateway.detect", requestId, "success", EntityDetails(found.Select(e => e.Type)), timer, found.Select(e => e.Type), ct);
         return new DetectOutput(requestId, found);
     }
 
@@ -47,6 +50,7 @@ public sealed class GatewayPipeline(
         GatewayCaller caller, string text, Guid? policyId, string? subjectId, TimeSpan? vaultTtl, CancellationToken ct = default)
     {
         var requestId = NewRequestId();
+        var timer = Stopwatch.StartNew();
         var resolved = await policies.ResolveAsync(caller.TenantId, caller.ClientId, policyId, ct);
         if (resolved.IsFailure) return Result.Failure<DeidentifyOutput>(resolved.Error);
         var policy = resolved.Value.Document;
@@ -57,7 +61,7 @@ public sealed class GatewayPipeline(
         var protectedText = await ProtectAsync(caller, text, policy, session, requestId, ct);
         if (protectedText.IsFailure)
         {
-            await DeniedAsync(caller, "gateway.deidentify", requestId, protectedText.Error, ct);
+            await DeniedAsync(caller, "gateway.deidentify", requestId, protectedText.Error, timer, ct);
             return Result.Failure<DeidentifyOutput>(protectedText.Error);
         }
 
@@ -69,7 +73,7 @@ public sealed class GatewayPipeline(
             .ToList();
         var details = EntityDetails(entities.Select(e => e.Type));
         details["policyVersion"] = resolved.Value.Version.ToString();
-        await AuditAsync(caller, "gateway.deidentify", requestId, "success", details, ct);
+        await AuditAsync(caller, "gateway.deidentify", requestId, "success", details, timer, entities.Select(e => e.Type), ct);
 
         return new DeidentifyOutput(requestId, protectedText.Value.Text, entities, session.Id, session.ExpiresAt);
     }
@@ -79,6 +83,7 @@ public sealed class GatewayPipeline(
     public async Task<Result<ReidentifyOutput>> ReidentifyAsync(GatewayCaller caller, Guid vaultSessionId, string text, CancellationToken ct = default)
     {
         var requestId = NewRequestId();
+        var timer = Stopwatch.StartNew();
         var resolved = await policies.ResolveAsync(caller.TenantId, caller.ClientId, null, ct);
         if (resolved.IsFailure) return Result.Failure<ReidentifyOutput>(resolved.Error);
 
@@ -86,7 +91,7 @@ public sealed class GatewayPipeline(
         if (!resolved.Value.Document.ReidentifyEnabled || !caller.CanReidentify)
         {
             var denied = Error.Forbidden("policy.reidentify_denied", "Re-identification is not allowed.");
-            await DeniedAsync(caller, "gateway.reidentify", requestId, denied, ct);
+            await DeniedAsync(caller, "gateway.reidentify", requestId, denied, timer, ct);
             return Result.Failure<ReidentifyOutput>(denied);
         }
 
@@ -96,7 +101,7 @@ public sealed class GatewayPipeline(
 
         var restored = await rehydrator.RestoreAsync(text, session, ct);
         await AuditAsync(caller, "gateway.reidentify", requestId, "success",
-            new Dictionary<string, string> { ["count"] = restored.Replaced.ToString() }, ct);
+            new Dictionary<string, string> { ["count"] = restored.Replaced.ToString() }, timer, null, ct);
         return new ReidentifyOutput(restored.Text, restored.Replaced, restored.Unresolved);
     }
 
@@ -125,7 +130,7 @@ public sealed class GatewayPipeline(
             var protectedText = await ProtectAsync(caller, message.Content, policy, session, requestId, ct);
             if (protectedText.IsFailure)
             {
-                await DeniedAsync(caller, "gateway.chat", requestId, protectedText.Error, ct);
+                await DeniedAsync(caller, "gateway.chat", requestId, protectedText.Error, timer, ct);
                 return Result.Failure<ChatOutput>(protectedText.Error);   // nothing has been sent to any provider
             }
             sanitized.Add(new LlmMessage(message.Role, protectedText.Value.Text));
@@ -139,7 +144,7 @@ public sealed class GatewayPipeline(
         {
             var failed = EntityDetails(protectedTypes);
             failed["reason"] = answer.Error.Code;
-            await AuditAsync(caller, "gateway.chat", requestId, "failure", failed, ct);
+            await AuditAsync(caller, "gateway.chat", requestId, "failure", failed, timer, protectedTypes, ct);
             return Result.Failure<ChatOutput>(answer.Error.With("requestId", requestId));
         }
 
@@ -147,7 +152,7 @@ public sealed class GatewayPipeline(
         var scanned = await ScanOutputAsync(caller, answer.Value.Content, policy, requestId, ct);
         if (scanned.IsFailure)
         {
-            await DeniedAsync(caller, "gateway.chat", requestId, scanned.Error, ct);
+            await DeniedAsync(caller, "gateway.chat", requestId, scanned.Error, timer, ct);
             return Result.Failure<ChatOutput>(scanned.Error);
         }
 
@@ -166,7 +171,7 @@ public sealed class GatewayPipeline(
         details["model"] = input.Model;
         details["provider"] = answer.Value.Provider;
         details["latencyMs"] = timer.ElapsedMilliseconds.ToString();
-        await AuditAsync(caller, "gateway.chat", requestId, "success", details, ct);
+        await AuditAsync(caller, "gateway.chat", requestId, "success", details, timer, protectedTypes, ct);
 
         var counts = protectedTypes.GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count());
         return new ChatOutput(requestId, answer.Value, content, restored, resolved.Value.Version, counts, sanitized, scanned.Value);
@@ -239,20 +244,36 @@ public sealed class GatewayPipeline(
         };
     }
 
-    private async Task AuditAsync(GatewayCaller caller, string action, string requestId, string result, Dictionary<string, string> details, CancellationToken ct)
+    /// <summary>
+    /// Records the call in the audit log and announces it on the gateway topic. The announcement is only added to the
+    /// unit of work here; the audit writer's save stores it together with the audit row, so both exist or neither does.
+    /// </summary>
+    private async Task AuditAsync(
+        GatewayCaller caller, string action, string requestId, string result, Dictionary<string, string> details,
+        Stopwatch timer, IEnumerable<string>? entityTypes, CancellationToken ct)
     {
         details["requestId"] = requestId;
-        var created = AuditEvent.Create(caller.TenantId, clock.UtcNow, caller.ActorType, caller.ClientId, action, "gateway_request", null, result, caller.Ip, details);
+        var now = clock.UtcNow;
+        var created = AuditEvent.Create(caller.TenantId, now, caller.ActorType, caller.ClientId, action, "gateway_request", null, result, caller.Ip, details);
         if (created.IsFailure)
         {
             logger.LogError("Could not build audit event {Action}: {Code}", action, created.Error.Code);
             return;
         }
+
+        var counts = (entityTypes ?? []).GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count());
+        var announced = GatewayRequestEvent.Create(requestId, now, caller.TenantId, caller.ClientId, caller.ActorType, action, result, counts,
+            timer.ElapsedMilliseconds, details.GetValueOrDefault("model"), details.GetValueOrDefault("provider"),
+            details.GetValueOrDefault("policyVersion"), details.GetValueOrDefault("reason"));
+        var queued = announced.IsSuccess ? outbox.Enqueue(caller.TenantId, OutboxTopics.GatewayRequests, announced.Value) : Result.Failure(announced.Error);
+        if (queued.IsFailure)
+            logger.LogError("Could not announce {Action} for request {RequestId}: {Code}", action, requestId, queued.Error.Code);   // the audit row still gets written
+
         await audit.WriteAsync(created.Value, ct);
     }
 
-    private Task DeniedAsync(GatewayCaller caller, string action, string requestId, Error error, CancellationToken ct) =>
-        AuditAsync(caller, action, requestId, "denied", new Dictionary<string, string> { ["reason"] = error.Code }, ct);
+    private Task DeniedAsync(GatewayCaller caller, string action, string requestId, Error error, Stopwatch timer, CancellationToken ct) =>
+        AuditAsync(caller, action, requestId, "denied", new Dictionary<string, string> { ["reason"] = error.Code }, timer, null, ct);
 
     private async Task RecordSecurityEventAsync(GatewayCaller caller, Severity severity, string type, string requestId, IReadOnlyList<string> types, CancellationToken ct)
     {

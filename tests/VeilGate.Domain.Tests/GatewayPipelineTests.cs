@@ -10,6 +10,7 @@ using VeilGate.Application.Transformation;
 using VeilGate.Domain.Audit;
 using VeilGate.Domain.Common;
 using VeilGate.Domain.Detection;
+using VeilGate.Domain.Messaging;
 using VeilGate.Domain.Policies;
 using VeilGate.Domain.Vault;
 using VeilGate.Infrastructure.Detection;
@@ -66,6 +67,13 @@ public class GatewayPipelineTests
         public Task WriteAsync(SecurityEvent securityEvent, CancellationToken ct = default) { Events.Add(securityEvent); return Task.CompletedTask; }
     }
 
+    private sealed class FakeOutbox : IOutbox
+    {
+        public readonly List<(Guid TenantId, string Topic, object Payload)> Messages = [];
+        public Result Enqueue(Guid tenantId, string topic, object payload) { Messages.Add((tenantId, topic, payload)); return Result.Success(); }
+        public IEnumerable<GatewayRequestEvent> Events => Messages.Select(m => (GatewayRequestEvent)m.Payload);
+    }
+
     private sealed class FixedResolver(PolicyDocument document) : IPolicyResolver
     {
         public Task<Result<ResolvedPolicy>> ResolveAsync(Guid tenantId, Guid clientId, Guid? policyId, CancellationToken ct = default) =>
@@ -87,6 +95,7 @@ public class GatewayPipelineTests
         public readonly FakeLlm Llm;
         public readonly FakeAudit Audit = new();
         public readonly FakeSecurity Security = new();
+        public readonly FakeOutbox Outbox = new();
         public readonly IGatewayPipeline Pipeline;
 
         public Rig(Func<LlmRequest, Result<LlmResponse>>? llm = null, PolicyDocument? policy = null, IEnumerable<IDetector>? detectors = null)
@@ -95,7 +104,7 @@ public class GatewayPipelineTests
             var detection = new DetectionPipeline(detectors ?? [new RegexDetector(), new NameHeuristicDetector()]);
             Pipeline = new GatewayPipeline(
                 detection, new PolicyEngine(), new Transformer(), new OutboundLeakGate(detection), Vault, new Rehydrator(Vault), Llm,
-                new FixedResolver(policy ?? PolicyTemplates.Get("hipaa-safe-harbor")!), Audit, Security, new FixedClock(),
+                new FixedResolver(policy ?? PolicyTemplates.Get("hipaa-safe-harbor")!), Audit, Security, Outbox, new FixedClock(),
                 NullLogger<GatewayPipeline>.Instance);
         }
     }
@@ -389,5 +398,120 @@ public class GatewayPipelineTests
         var result = await rig.Pipeline.DeidentifyAsync(Caller(), "Call 513​-555​-0142 now", null, null, null);
 
         result.Value.Text.Should().Be("Call [PHONE] now");
+    }
+
+    // ----------------------------------------------------------------- events
+
+    [Fact]
+    public async Task Chat_announces_itself_on_the_gateway_topic_with_counts_and_no_text()
+    {
+        var rig = new Rig();
+
+        var result = await rig.Pipeline.ChatAsync(Caller(), Chat(Note), null);
+
+        var message = rig.Outbox.Messages.Should().ContainSingle().Subject;
+        message.TenantId.Should().Be(TenantId);
+        message.Topic.Should().Be("vg.gateway.requests.v1");
+
+        var e = rig.Outbox.Events.Single();
+        e.RequestId.Should().Be(result.Value.RequestId);
+        e.Action.Should().Be("gateway.chat");
+        e.Result.Should().Be("success");
+        e.ClientId.Should().Be(ClientId);
+        e.ActorType.Should().Be("client");
+        e.OccurredAt.Should().Be(Now);
+        e.Entities.Should().BeEquivalentTo(new Dictionary<string, int> { ["PERSON"] = 1, ["MRN"] = 1, ["PHONE"] = 1, ["DATE"] = 1 });
+        e.Model.Should().Be("gpt-4o-mini");
+        e.Provider.Should().Be("mock-llm");
+        e.PolicyVersion.Should().Be("7");
+        e.LatencyMs.Should().BeGreaterThanOrEqualTo(0);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(message.Payload, System.Text.Json.JsonSerializerOptions.Web);
+        foreach (var secret in Secrets) json.Should().NotContain(secret);
+    }
+
+    [Fact]
+    public async Task The_announcement_and_the_audit_row_describe_the_same_request()
+    {
+        var rig = new Rig();
+
+        await rig.Pipeline.ChatAsync(Caller(), Chat(Note), null);
+
+        var audit = rig.Audit.Events.Should().ContainSingle().Subject;
+        var e = rig.Outbox.Events.Single();
+        audit.Details["requestId"].Should().Be(e.RequestId);
+        audit.Action.Should().Be(e.Action);
+        audit.Result.Should().Be(e.Result);
+        audit.OccurredAt.Should().Be(e.OccurredAt);
+    }
+
+    [Fact]
+    public async Task A_blocked_chat_is_announced_as_denied_with_its_reason()
+    {
+        var rig = new Rig(policy: Policy("""
+            version: 1
+            name: strict
+            defaults: { action: REDACT }
+            entities:
+              SSN: { action: BLOCK }
+            """));
+
+        await rig.Pipeline.ChatAsync(Caller(), Chat("SSN 123-45-6789 for the patient"), null);
+
+        var e = rig.Outbox.Events.Should().ContainSingle().Subject;
+        e.Result.Should().Be("denied");
+        e.Reason.Should().Be("policy.blocked");
+        e.Entities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_provider_failure_is_announced_as_a_failure()
+    {
+        var rig = new Rig(_ => Result.Failure<LlmResponse>(Error.ProviderUnavailable()));
+
+        await rig.Pipeline.ChatAsync(Caller(), Chat("Hello"), null);
+
+        var e = rig.Outbox.Events.Should().ContainSingle().Subject;
+        e.Result.Should().Be("failure");
+        e.Reason.Should().Be("provider.unavailable");
+    }
+
+    [Fact]
+    public async Task Detect_deidentify_and_reidentify_each_announce_one_event()
+    {
+        var rig = new Rig();
+
+        await rig.Pipeline.DetectAsync(Caller(), "Call 513-555-0142", 0.5);
+        var protectedNote = await rig.Pipeline.DeidentifyAsync(Caller(), "Patient John Smith arrived.", null, null, null);
+        await rig.Pipeline.ReidentifyAsync(Caller(), protectedNote.Value.VaultSessionId, "x");
+
+        rig.Outbox.Events.Select(e => e.Action).Should().Equal("gateway.detect", "gateway.deidentify", "gateway.reidentify");
+        rig.Outbox.Events.Should().OnlyContain(e => e.Result == "success");
+        rig.Outbox.Events.First().Entities.Should().BeEquivalentTo(new Dictionary<string, int> { ["PHONE"] = 1 });
+    }
+
+    [Fact]
+    public async Task A_refused_reidentify_is_announced_as_denied()
+    {
+        var rig = new Rig();
+        var protectedNote = await rig.Pipeline.DeidentifyAsync(Caller(), "Patient John Smith arrived.", null, null, null);
+
+        await rig.Pipeline.ReidentifyAsync(Caller(canReidentify: false), protectedNote.Value.VaultSessionId, "x");
+
+        var e = rig.Outbox.Events.Last();
+        e.Action.Should().Be("gateway.reidentify");
+        e.Result.Should().Be("denied");
+        e.Reason.Should().Be("policy.reidentify_denied");
+    }
+
+    [Fact]
+    public async Task A_call_that_fails_before_it_is_audited_announces_nothing()
+    {
+        var rig = new Rig();
+
+        await rig.Pipeline.DeidentifyAsync(Caller(), Note, Guid.NewGuid(), null, null);   // unknown policy
+
+        rig.Outbox.Messages.Should().BeEmpty();
+        rig.Audit.Events.Should().BeEmpty();
     }
 }
