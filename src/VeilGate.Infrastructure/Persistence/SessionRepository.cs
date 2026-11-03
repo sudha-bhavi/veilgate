@@ -29,6 +29,11 @@ public sealed class SessionRepository(VeilGateDbContext db) : ISessionRepository
         return candidates.Where(s => s.IsActive(now)).ToList();
     }
 
+    public Task<SessionState?> GetStateAsync(Guid sessionId, CancellationToken ct) =>
+        db.Sessions.AsNoTracking().Where(s => s.Id == sessionId)
+            .Select(s => new SessionState(s.RevokedAt, s.ExpiresAt))
+            .FirstOrDefaultAsync(ct);
+
     public Task<Session?> FindForUserAsync(Guid sessionId, Guid userId, CancellationToken ct) =>
         db.Sessions.FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
 
