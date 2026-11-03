@@ -35,6 +35,9 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 - **My sessions.** Every signed-in person, whatever their role, can open **Security** in the console to see where they
   are signed in (device, IP address, when, last active), end a session they do not recognise, or sign out all other
   sessions. The IP address and browser are recorded when a session starts.
+- **Security events.** The **Security events** tab lists failed sign-in lockouts, two-step resets, blocked leaks and API
+  client problems. Tenant Admins and Security Officers see the whole organisation and can filter by person; everyone
+  else sees only events about their own account.
 - **A read-only demo.** An optional "Try the demo" button on the sign-in page lets a visitor look around with sample
   data, without an account. It is off by default and cannot change anything (see "Try the demo" below).
 - **A React console** for all of it: playground, policies with a YAML editor, API clients, providers, evaluations,
@@ -147,6 +150,17 @@ An ended session can no longer renew its sign-in, so that device is signed out w
 at most `Auth__AccessTokenMinutes` (10 by default). The API does not yet check the session on every request, so an
 access token that was already issued keeps working until then. A demo session can look at the list but cannot end
 anything.
+
+**Security events**
+
+`GET /api/v1/security-events` is open to every person of the tenant, and what comes back depends on the role. Tenant
+Admins and Security Officers get the whole organisation and may narrow it with `userId`, `severity`, `from` and `to`.
+Everyone else always gets only events about their own account; asking for another person's is refused with
+`403 security_events.own_only`. `GET /api/v1/security-events/people` lists the people for the console's User filter and
+is for Tenant Admins and Security Officers only. Another organisation's events are never visible. No migration is needed.
+
+Events about an API client (a wrong secret, a blocked address) have no person, so only the two oversight roles see them.
+The table keeps no browser information for security events, so a row shows time, type, IP address and details.
 
 **Try the demo (optional)**
 
