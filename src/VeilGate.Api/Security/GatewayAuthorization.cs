@@ -41,6 +41,12 @@ public static class AuthPolicies
 
     /// <summary>Who may read the audit log and check its hash chain: Tenant Admins, Security Officers and Auditors. Nobody may change it.</summary>
     public const string AuditReader = "AuditReader";
+
+    /// <summary>Who may open the security events: every person of the tenant. What they get back depends on the role (see the handler).</summary>
+    public const string SecurityEventReader = "SecurityEventReader";
+
+    /// <summary>Who sees the security events of the whole organization and may filter them by person (Security center, UI doc 7.1).</summary>
+    public const string SecurityOversight = "SecurityOversight";
         /// <summary>Who may create datasets and run evaluations: the people who write and approve policies.</summary>
     public const string EvaluationOperator = "EvaluationOperator";
 
@@ -116,7 +122,17 @@ public static class AuthPolicies
             .RequireAuthenticatedUser()
             .RequireAssertion(ctx => !IsClientToken(ctx.User))
             .RequireRole("TenantAdmin", "SecurityOfficer", "Auditor"));
-          
+
+        options.AddPolicy(SecurityEventReader, p => p
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => !IsClientToken(ctx.User))
+            .RequireRole("TenantAdmin", "SecurityOfficer", "Developer", "Auditor"));
+
+        options.AddPolicy(SecurityOversight, p => p
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => !IsClientToken(ctx.User))
+            .RequireRole("TenantAdmin", "SecurityOfficer"));
+
            options.AddPolicy(EvaluationOperator, p => p
             .RequireAuthenticatedUser()
             .RequireAssertion(ctx => !IsClientToken(ctx.User))
