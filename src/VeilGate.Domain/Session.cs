@@ -9,6 +9,7 @@ public sealed class Session : TenantEntity
 {
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromHours(8);
     public static readonly TimeSpan AbsoluteTimeout = TimeSpan.FromDays(7);
+        public static readonly TimeSpan DemoTimeout = TimeSpan.FromHours(1);   // a demo visit is short
 
     private Session() { }
 
@@ -19,11 +20,12 @@ public sealed class Session : TenantEntity
     public DateTimeOffset ExpiresAt { get; private set; }   // the hard limit, however active the user is
     public DateTimeOffset? RevokedAt { get; private set; }
     public string? RevokeReason { get; private set; }
+        public bool IsDemo { get; private set; }
 
     public static readonly Error RefreshInvalid = Error.Unauthorized("auth.refresh_invalid", "Sign in again.");
     public static readonly Error RefreshReused = Error.Unauthorized("auth.refresh_reused", "Sign in again.");
 
-    public static Result<Session> Start(Guid tenantId, Guid userId, string refreshHash, DateTimeOffset now)
+        public static Result<Session> Start(Guid tenantId, Guid userId, string refreshHash, DateTimeOffset now, bool demo = false)
     {
         if (tenantId == Guid.Empty) return Error.Validation("validation.failed", "Tenant is required.");
         if (userId == Guid.Empty) return Error.Validation("validation.failed", "User is required.");
@@ -34,7 +36,8 @@ public sealed class Session : TenantEntity
             UserId = userId,
             CurrentRefreshHash = refreshHash,
             LastSeenAt = now,
-            ExpiresAt = now + AbsoluteTimeout
+            ExpiresAt = now + (demo ? DemoTimeout : AbsoluteTimeout),
+            IsDemo = demo
         };
         s.SetTenant(tenantId);
         return s;

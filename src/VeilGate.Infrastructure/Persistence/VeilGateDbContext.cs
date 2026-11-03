@@ -140,6 +140,7 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
             e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
             e.Property(x => x.RevokedAt).HasColumnName("revoked_at");
             e.Property(x => x.RevokeReason).HasColumnName("revoke_reason").HasMaxLength(32);
+                        e.Property(x => x.IsDemo).HasColumnName("is_demo");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
             e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);

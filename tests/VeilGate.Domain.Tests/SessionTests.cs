@@ -147,4 +147,18 @@ public class SessionTests
         s.RevokeReason.Should().Be("logout");
         s.IsActive(Now).Should().BeFalse();
     }
+        [Fact]
+    public void A_normal_session_is_not_a_demo_session()
+        => StartSession().session.IsDemo.Should().BeFalse();
+
+    [Fact]
+    public void A_demo_session_is_marked_and_lasts_only_an_hour()
+    {
+        var s = Session.Start(Tenant, User, NewHash(), Now, demo: true).Value;
+
+        s.IsDemo.Should().BeTrue();
+        s.ExpiresAt.Should().Be(Now + Session.DemoTimeout);
+        s.IsActive(Now.AddMinutes(59)).Should().BeTrue();
+        s.IsActive(Now.AddMinutes(61)).Should().BeFalse();
+    }
 }
