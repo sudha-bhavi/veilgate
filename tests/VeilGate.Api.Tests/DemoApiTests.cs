@@ -236,6 +236,8 @@ public sealed class DemoApiTests : IDisposable
             (HttpMethod.Post, "/api/v1/auth/step-up", new { code = "123456" }),
             (HttpMethod.Delete, $"/api/v1/auth/sessions/{Guid.NewGuid()}", null),
             (HttpMethod.Post, "/api/v1/auth/logout-all", new { keepCurrent = true }),
+            (HttpMethod.Post, "/api/v1/auth/password/change", new { currentPassword = "x", newPassword = "y" }),
+            (HttpMethod.Post, "/api/v1/auth/mfa/recovery-codes/regenerate", null),
         };
 
         foreach (var (method, path, body) in attempts)
