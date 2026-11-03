@@ -32,6 +32,9 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
   F1 and leaks per type, and can compare two runs.
 - **People and invitations.** Tenant Admins invite colleagues by email (a single-use link that expires after 48 hours),
   choose their role, disable accounts, and reset someone's two-step sign-in.
+- **My sessions.** Every signed-in person, whatever their role, can open **Security** in the console to see where they
+  are signed in (device, IP address, when, last active), end a session they do not recognise, or sign out all other
+  sessions. The IP address and browser are recorded when a session starts.
 - **A read-only demo.** An optional "Try the demo" button on the sign-in page lets a visitor look around with sample
   data, without an account. It is off by default and cannot change anything (see "Try the demo" below).
 - **A React console** for all of it: playground, policies with a YAML editor, API clients, providers, evaluations,
@@ -120,6 +123,30 @@ one-time recovery codes. Keep them: they are shown only once.
 
 When you add a model provider, enter its address without `/v1` (for the WireMock container: `http://localhost:8089`).
 VeilGate adds `/v1/chat/completions` itself.
+
+**My sessions**
+
+Apply the migration that adds the `ip` and `user_agent` columns to sessions (`AddSessionIpUserAgent`), the same way as
+the others:
+
+```bash
+dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
+```
+
+Sessions that were already open before the migration have no IP address or browser, so they show as "Unknown device"
+until the person signs in again. The API offers three calls to every signed-in person, and only ever for their own
+sessions:
+
+- `GET /api/v1/auth/sessions` lists the active ones, with the one the request is using marked `current`.
+- `DELETE /api/v1/auth/sessions/{id}` ends another one. Ending the session in use is refused (`409 session.current`);
+  that is a sign-out. Someone else's session is "not found".
+- `POST /api/v1/auth/logout-all` with `{"keepCurrent": true}` (the default) signs out every other session. It needs a
+  recent second-factor check, like the other sensitive actions.
+
+An ended session can no longer renew its sign-in, so that device is signed out when its current access token runs out:
+at most `Auth__AccessTokenMinutes` (10 by default). The API does not yet check the session on every request, so an
+access token that was already issued keeps working until then. A demo session can look at the list but cannot end
+anything.
 
 **Try the demo (optional)**
 
