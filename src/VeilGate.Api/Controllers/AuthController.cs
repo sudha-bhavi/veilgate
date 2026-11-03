@@ -60,7 +60,7 @@ public sealed class AuthController(
     {
         if (!demo.Value.Enabled) return Fail(DemoSignInHandler.Unavailable);
 
-        var result = await handler.HandleAsync(new DemoSignInCommand(demo.Value.UserEmail, CallerIp), ct);
+        var result = await handler.HandleAsync(new DemoSignInCommand(demo.Value.UserEmail, CallerIp, CallerUserAgent), ct);
         if (result.IsFailure) return Fail(result.Error);
 
         RefreshCookie.Write(Response, result.Value.RefreshToken, result.Value.RefreshExpiresAt);

@@ -9,6 +9,9 @@ public abstract class ApiControllerBase : ControllerBase
     /// <summary>The caller's address as the server sees it, for the audit log.</summary>
     protected string? CallerIp => HttpContext.Connection.RemoteIpAddress?.ToString();
 
+    /// <summary>The browser's own description of itself. Untrusted text: it is only shown back to the same person.</summary>
+    protected string? CallerUserAgent => Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? ua : null;
+
     /// <summary>Turns a domain Error into an RFC 9457 problem+json response with a stable "code" (Backend doc error catalog).</summary>
     protected ObjectResult Fail(Error error)
     {
