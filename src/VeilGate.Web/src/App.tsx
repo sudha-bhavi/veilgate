@@ -37,6 +37,7 @@ import EvaluationComparePage from "./pages/EvaluationComparePage";
 import AuditLogPage from "./pages/AuditLogPage";
 import UsersPage from "./pages/UsersPage";
 import AcceptInvitePage from "./pages/AcceptInvitePage";
+import SecurityPage from "./pages/SecurityPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import { COMING_SOON } from "./pages/comingSoon";
 
@@ -121,6 +122,13 @@ export default function App() {
         <Route element={<RequireAuth roles={USER_ADMIN_ROLES} />}>
           <Route element={<AppShell />}>
             <Route path="/users" element={<UsersPage />} />
+          </Route>
+        </Route>
+
+        {/* "My account" security: every tenant role, because it only touches the signed-in person's own sessions. */}
+        <Route element={<RequireAuth roles={ALL_TENANT_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/security" element={<SecurityPage />} />
           </Route>
         </Route>
 
