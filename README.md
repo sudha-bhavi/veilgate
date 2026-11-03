@@ -65,11 +65,13 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 | M3        | Gateway endpoints, LLM provider with Polly, audit hash chain                                        | ✅ Done |
 | M4        | Policy workflow, API clients, LLM providers, evaluations, step-up check                             | ✅ Done |
 | M5        | React console: sign-in, playground, policies, API clients, providers, evaluations, audit log, users | ✅ Done |
+| M5+       | Security page, read-only demo, invitations                                                          | ✅ Done |
 | M6        | Kafka outbox, workers, dashboards                                                                   |         |
 | M7        | Hardening, pen test, deployment                                                                     |         |
 
-In the console, Dashboard, Requests, Security and Settings are marked "Not built yet": their server side is not
-written. Everything else works end to end.
+In the console, Dashboard, Requests and Settings are marked "Not built yet": their server side is not written.
+Everything else works end to end, including the Security page (sessions, two-step sign-in, password and security
+events). Passkeys are not built yet.
 
 ## Run it locally
 
