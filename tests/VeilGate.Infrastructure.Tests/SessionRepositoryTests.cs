@@ -195,6 +195,52 @@ public class SessionRepositoryTests(PostgresFixture pg)
     }
 
     [Fact]
+    public async Task The_state_of_a_session_shows_whether_it_was_revoked()
+    {
+        var (t, u) = await SeedUser();
+        var saved = await SaveSession(t, u, NewHash());
+
+        await using (var db = AppContext(t.Id))
+        {
+            var state = await new SessionRepository(db).GetStateAsync(saved.Id, default);
+            state!.RevokedAt.Should().BeNull();
+            state.ExpiresAt.Should().BeCloseTo(saved.ExpiresAt, TimeSpan.FromMilliseconds(1));
+        }
+
+        await using (var db = AppContext(t.Id))
+        {
+            var repo = new SessionRepository(db);
+            (await repo.FindForUserAsync(saved.Id, u.Id, default))!.Revoke("logout", Now);
+            await repo.SaveChangesAsync(default);
+        }
+
+        await using var check = AppContext(t.Id);
+        (await new SessionRepository(check).GetStateAsync(saved.Id, default))!.RevokedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task The_state_of_an_unknown_session_is_null()
+    {
+        var (t, _) = await SeedUser();
+
+        await using var db = AppContext(t.Id);
+
+        (await new SessionRepository(db).GetStateAsync(Guid.NewGuid(), default)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Another_tenants_session_has_no_state_here()
+    {
+        var (t, u) = await SeedUser();
+        var (other, _) = await SeedUser();
+        var saved = await SaveSession(t, u, NewHash());
+
+        await using var db = AppContext(other.Id);
+
+        (await new SessionRepository(db).GetStateAsync(saved.Id, default)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task A_session_is_found_for_its_owner_only()
     {
         var (t, u) = await SeedUser();

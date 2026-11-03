@@ -150,10 +150,12 @@ sessions:
 - `POST /api/v1/auth/logout-all` with `{"keepCurrent": true}` (the default) signs out every other session. It needs a
   recent second-factor check, like the other sensitive actions.
 
-An ended session can no longer renew its sign-in, so that device is signed out when its current access token runs out:
-at most `Auth__AccessTokenMinutes` (10 by default). The API does not yet check the session on every request, so an
-access token that was already issued keeps working until then. A demo session can look at the list but cannot end
-anything.
+An ended session stops working at once. The API looks up the session of every signed-in request, so after a sign-out, a
+revoke, "sign out all other sessions", a password change, or disabling the person, that device's very next request is
+refused with `401 auth.token_invalid`, and the console signs it out. A token whose session has no record is not refused
+by this check, in the same way an unknown API client is not (a forged token already fails its signature). The idle
+timeout is not checked per request: it only moves when a session is renewed, and an access token lasts
+`Auth__AccessTokenMinutes` (10 by default) at most. A demo session can look at the list but cannot end anything.
 
 **Two-step sign-in and password**
 
