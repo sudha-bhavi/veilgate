@@ -30,6 +30,7 @@ try
         .ValidateOnStart();
 
     builder.Services.AddOptions<AuthOptions>().BindConfiguration(AuthOptions.Section).ValidateDataAnnotations().ValidateOnStart();
+    builder.Services.AddOptions<DemoOptions>().BindConfiguration(DemoOptions.Section).ValidateDataAnnotations().ValidateOnStart();
     builder.Services.AddSingleton<ISigningKeyProvider, SigningKeyProvider>();
     builder.Services.AddSingleton<ITokenService, TokenService>();
 
@@ -150,6 +151,7 @@ try
     app.UseAuthentication();                       // 1. who is calling? (verifies the token signature, issuer, audience, expiry)
     app.UseRateLimiter();                          //    after authentication, so limits can be per client; login limits are still per IP
     app.UseMiddleware<TenantResolutionMiddleware>(); // 2. which tenant? only from the signed token, then check the token is still valid
+    app.UseMiddleware<DemoReadOnlyMiddleware>();     //    a "Try the demo" session may only look around and try the playground
     app.UseAuthorization();                        // 3. may they do this? (controllers require a token unless [AllowAnonymous])
 
     // Secure by default: an endpoint with no [Authorize] or [AllowAnonymous] of its own gets a plain [Authorize] (a signed-in person).
