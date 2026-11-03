@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditChainVerifier, AuditChainVerifier>();
         services.AddScoped<IAuditEventReader, AuditEventReader>();
         services.AddScoped<ISecurityEventWriter, SecurityEventWriter>();
+        services.AddScoped<ISecurityEventReader, SecurityEventReader>();
                 services.AddOptions<SmtpOptions>().BindConfiguration(SmtpOptions.Section);
         services.AddOptions<ConsoleOptions>().BindConfiguration(ConsoleOptions.Section);
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
