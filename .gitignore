@@ -8,4 +8,6 @@ obj/
 node_modules/
 dist/
 TestResults/
+tools/pentest/.local/
+__pycache__/
 .DS_Store
