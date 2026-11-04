@@ -84,6 +84,35 @@ jobs:
       - name: Build the migration image
         run: docker build -f deploy/Dockerfile.migrate -t veilgate-migrate:ci .
 
+  deployment-files:
+    name: Deployment files are valid
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The production compose file parses (with the example values)
+        run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod.example config --quiet
+
+      - name: The secrets script is valid shell
+        run: bash -n deploy/scripts/generate-secrets.sh
+
+      # Runs the real script and checks that what it writes gives a valid stack and sensible secrets.
+      - name: The secrets script writes a complete env file
+        run: |
+          bash deploy/scripts/generate-secrets.sh veilgate.example.com ops@example.com
+          test "$(stat -c %a deploy/.env.prod)" = "600"
+          # Mail settings are left empty on purpose, so the stack must refuse to be described until they are filled in...
+          ! docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod config --quiet 2>/dev/null
+          # ...and once they are, everything the script wrote must be complete.
+          sed -i 's/^SMTP_HOST=$/SMTP_HOST=smtp.example.com/' deploy/.env.prod
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod config --quiet
+          grep -q '^VAULT_KEK=' deploy/.env.prod
+          test "$(grep '^VAULT_KEK=' deploy/.env.prod | cut -d= -f2- | base64 -d | wc -c)" = "32"
+          test "$(grep '^MFA_ENCRYPTION_KEY=' deploy/.env.prod | cut -d= -f2- | base64 -d | wc -c)" = "32"
+          grep -q "BEGIN EC PRIVATE KEY" deploy/.env.prod
+          ! bash deploy/scripts/generate-secrets.sh veilgate.example.com ops@example.com   # refuses to overwrite
+
   pentest-tooling:
     name: Pen-test helper tests
     runs-on: ubuntu-latest

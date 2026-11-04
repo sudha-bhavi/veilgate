@@ -1,0 +1,28 @@
+# The public front door: HTTPS with a free Let's Encrypt certificate that Caddy obtains and renews by itself.
+# It needs ports 80 and 443 reachable from the internet, and VG_DOMAIN's DNS pointing at this machine.
+{
+	email {$ACME_EMAIL}
+}
+
+{$VG_DOMAIN} {
+	encode zstd gzip
+
+	# The health checks are for Docker, not for the internet.
+	@internal path /health /health/*
+	respond @internal 404
+
+	# Bigger than the largest allowed request (a 5 MB FHIR bundle), so oversized bodies are refused here, cheaply.
+	request_body {
+		max_size 6MB
+	}
+
+	# Caddy replaces any X-Forwarded-For a client sends with the address it actually saw, which is what the API believes.
+	reverse_proxy api:8080
+
+	header -Server
+
+	log {
+		output stdout
+		format json
+	}
+}
