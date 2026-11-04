@@ -21,6 +21,15 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
             problem.Extensions["code"] = "payload.too_large";
             await ctx.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json");
         }
+        catch (Exception ex) when (IsTextTheDatabaseCannotStore(ex) && !ctx.Response.HasStarted)
+        {
+            // A NUL character (\u0000) or bytes that are not valid text cannot be stored by PostgreSQL. That is the caller's input, not our fault.
+            ctx.Response.Clear();
+            ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+            var problem = new ProblemDetails { Status = 400, Title = "The request contains characters that are not allowed." };
+            problem.Extensions["code"] = "request.invalid_characters";
+            await ctx.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json");
+        }
         catch (Exception ex)
         {
             log.LogError(ex, "Unhandled exception for {Method} {Path}", ctx.Request.Method, ctx.Request.Path.Value);
@@ -38,5 +47,13 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
             problem.Extensions["traceId"] = Activity.Current?.TraceId.ToString() ?? ctx.TraceIdentifier;
             await ctx.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json");
         }
+    }
+
+    // PostgreSQL error classes 22021 (character not in repertoire, which is what a NUL byte gives) and 22P05 (untranslatable character).
+    private static bool IsTextTheDatabaseCannotStore(Exception ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+            if (e is Npgsql.PostgresException { SqlState: "22021" or "22P05" }) return true;
+        return false;
     }
 }
