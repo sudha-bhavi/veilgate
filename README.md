@@ -573,6 +573,29 @@ kind of door the outbox publisher uses, because these workers have no tenant):
 - **Not done yet:** pinning third-party actions to a commit SHA (only GitHub's own `actions/*` are used so far), a secret scanner,
   and the staging and production deploy workflows from the Deployment document.
 
+### M7: automated security checks
+
+Some safety rules are checked by the test suite on every run (and so by CI), so a new table or endpoint cannot quietly weaken them.
+
+- **Row-level security audit** (`DatabaseSecurityAuditTests`). After the real migrations run, the test asks PostgreSQL itself, for
+  every table, not just the ones a test names:
+  - every table with a `tenant_id` has row-level security enabled **and forced**, and a policy for the app role that compares the row
+    with the tenant set for the connection;
+  - the only tables without a `tenant_id` are the two that are meant to be (`tenants` and the migration history). A new one fails
+    the test until someone decides on purpose;
+  - the runtime roles cannot bypass row-level security, create databases or roles, or be superusers; the read-only role has no write
+    access; nothing is granted to everyone; the audit log and outbox cannot be changed or deleted by the app role;
+  - every `SECURITY DEFINER` function pins its `search_path`, is not open to every role, and is runnable by the app role.
+- **Browser hardening headers** on every response: `X-Content-Type-Options`, `X-Frame-Options`, a referrer policy, a content security
+  policy (strict for the API, "our own files only" for the console), `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`
+  and a `Permissions-Policy` that switches off camera, microphone, location, payment and USB. `Strict-Transport-Security` is sent when
+  `SecurityHeaders__Hsts=true` (for a deployment served over HTTPS); it is off by default because it is meaningless over plain HTTP
+  and hard to undo once a browser has remembered it.
+- Already covered by earlier work: exact-origin CORS (a wildcard is refused at startup), per-IP login limits and per-client gateway
+  limits, refusal of unknown JSON fields, and the request-size limits.
+- **Not done yet:** the penetration test itself (the plan is Document 06; nothing here claims it has been run), a secret scanner in CI,
+  and a startup check that refuses dangerous settings in production.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
@@ -590,6 +613,9 @@ Where this project departs from the design documents (which were drafted with AI
   a status column the documents do not have.
 - **Order on retry.** Messages with the same key are published in creation order, but a retried message can arrive after a later
   one. The metrics consumer does not depend on order.
+- **HSTS is a setting, off by default.** The documents ask for it unconditionally. Sent over plain HTTP it does nothing, and a browser
+  that has remembered it for a year cannot easily be switched back, so a deployment turns it on (`SecurityHeaders__Hsts=true`) once
+  HTTPS works.
 - **Session grace period.** The documents say the reaper "removes expired refresh tokens and sessions". Here an ended session is kept for
   24 hours first, so reuse of a just-expired refresh token is still detected. It is a setting.
 - **No security events on the Dashboard.** The documents list `recentSecurityEvents` in the summary. Security events are filtered by role and

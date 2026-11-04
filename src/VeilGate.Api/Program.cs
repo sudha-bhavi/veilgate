@@ -31,6 +31,7 @@ try
 
     builder.Services.AddOptions<AuthOptions>().BindConfiguration(AuthOptions.Section).ValidateDataAnnotations().ValidateOnStart();
     builder.Services.AddOptions<DemoOptions>().BindConfiguration(DemoOptions.Section).ValidateDataAnnotations().ValidateOnStart();
+    builder.Services.AddOptions<SecurityHeadersOptions>().BindConfiguration(SecurityHeadersOptions.Section);
     builder.Services.AddSingleton<ISigningKeyProvider, SigningKeyProvider>();
     builder.Services.AddSingleton<ITokenService, TokenService>();
 
