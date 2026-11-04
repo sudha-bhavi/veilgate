@@ -1,3 +1,4 @@
+using System.Text.Json;
 using VeilGate.Domain.Common;
 
 namespace VeilGate.Domain.Messaging;
@@ -63,5 +64,40 @@ public sealed record GatewayRequestEvent
             ActorType = actorType, Action = action, Result = result, Entities = new Dictionary<string, int>(entities),
             LatencyMs = latencyMs, Model = model, Provider = provider, PolicyVersion = policyVersion, Reason = reason,
         };
+    }
+
+    /// <summary>
+    /// Reads an event from the JSON that was published, applying the same rules as <see cref="Create"/>. Anything that is not a
+    /// valid event is a failure: a consumer treats it as a message it can never handle.
+    /// </summary>
+    public static Result<GatewayRequestEvent> Parse(string json)
+    {
+        Wire? wire;
+        try { wire = JsonSerializer.Deserialize<Wire>(json, JsonSerializerOptions.Web); }
+        catch (JsonException) { return Error.Validation("validation.failed", "The message is not valid JSON."); }
+
+        if (wire?.RequestId is null || wire.ActorType is null || wire.Action is null || wire.Result is null || wire.TenantId == Guid.Empty)
+            return Error.Validation("validation.failed", "The message is missing required fields.");
+
+        return Create(wire.RequestId, wire.OccurredAt, wire.TenantId, wire.ClientId, wire.ActorType, wire.Action, wire.Result,
+            wire.Entities, wire.LatencyMs, wire.Model, wire.Provider, wire.PolicyVersion, wire.Reason);
+    }
+
+    // The shape on the wire. Kept apart from the event so the event itself cannot be built without going through Create.
+    private sealed class Wire
+    {
+        public string? RequestId { get; set; }
+        public DateTimeOffset OccurredAt { get; set; }
+        public Guid TenantId { get; set; }
+        public Guid ClientId { get; set; }
+        public string? ActorType { get; set; }
+        public string? Action { get; set; }
+        public string? Result { get; set; }
+        public Dictionary<string, int>? Entities { get; set; }
+        public long? LatencyMs { get; set; }
+        public string? Model { get; set; }
+        public string? Provider { get; set; }
+        public string? PolicyVersion { get; set; }
+        public string? Reason { get; set; }
     }
 }

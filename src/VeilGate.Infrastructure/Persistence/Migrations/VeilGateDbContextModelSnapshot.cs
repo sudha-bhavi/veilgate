@@ -749,6 +749,183 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("VeilGate.Domain.Metrics.GatewayRequestRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("actor_type");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Entities")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("entities");
+
+                    b.Property<int>("EntityCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("entity_count");
+
+                    b.Property<long?>("LatencyMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("latency_ms");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("PolicyVersion")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("policy_version");
+
+                    b.Property<string>("Provider")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("RequestId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("request_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_gateway_requests_time");
+
+                    b.HasIndex("TenantId", "ClientId", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_gateway_requests_client");
+
+                    b.HasIndex("TenantId", "Status", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_gateway_requests_problems")
+                        .HasFilter("status <> 'success'");
+
+                    b.ToTable("gateway_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_gateway_requests_actor", "actor_type in ('user','client')");
+
+                            t.HasCheckConstraint("ck_gateway_requests_entities", "entity_count >= 0");
+
+                            t.HasCheckConstraint("ck_gateway_requests_status", "status in ('success','failure','denied')");
+                        });
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Metrics.MetricsHour", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("Hour")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hour");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<int>("Blocked")
+                        .HasColumnType("integer")
+                        .HasColumnName("blocked");
+
+                    b.Property<long>("Entities")
+                        .HasColumnType("bigint")
+                        .HasColumnName("entities");
+
+                    b.Property<string>("EntitiesByType")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("entities_by_type");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed");
+
+                    b.Property<string>("LatencyBuckets")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("latency_buckets");
+
+                    b.Property<int>("Requests")
+                        .HasColumnType("integer")
+                        .HasColumnName("requests");
+
+                    b.HasKey("TenantId", "Hour", "ClientId");
+
+                    b.ToTable("metrics_hourly", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_metrics_hourly_counts", "requests >= 0 and blocked >= 0 and failed >= 0 and entities >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Metrics.ProcessedMessage", b =>
+                {
+                    b.Property<string>("Consumer")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("consumer");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("message_id");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Consumer", "MessageId");
+
+                    b.HasIndex("ProcessedAt")
+                        .HasDatabaseName("ix_processed_messages_age");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("processed_messages", (string)null);
+                });
+
             modelBuilder.Entity("VeilGate.Domain.MfaFactor", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1526,6 +1703,33 @@ namespace VeilGate.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("VeilGate.Domain.Messaging.OutboxMessage", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Metrics.GatewayRequestRecord", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Metrics.MetricsHour", b =>
+                {
+                    b.HasOne("VeilGate.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VeilGate.Domain.Metrics.ProcessedMessage", b =>
                 {
                     b.HasOne("VeilGate.Domain.Tenant", null)
                         .WithMany()

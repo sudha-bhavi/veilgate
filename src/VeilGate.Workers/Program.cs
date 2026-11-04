@@ -16,7 +16,9 @@ builder.Services.Configure<OutboxPublisherOptions>(builder.Configuration.GetSect
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<EvaluationWorker>();
 builder.Services.AddHostedService<OutboxPublisherWorker>();
-// Metrics aggregator, vault purger etc. are added in later milestones (Backend doc 6.6).
+builder.Services.AddSingleton<GatewayEventConsumerHandler>();
+builder.Services.AddHostedService<MetricsAggregatorWorker>();
+// Vault purger and session reaper are added in a later milestone step (Backend doc 6.6).
 builder.Build().Run();
 
 public sealed class HeartbeatWorker(ILogger<HeartbeatWorker> log) : BackgroundService
