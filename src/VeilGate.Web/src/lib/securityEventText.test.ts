@@ -16,6 +16,16 @@ const event = (over: Partial<SecurityEvent> = {}): SecurityEvent => ({
   ...over,
 });
 
+describe("eventTitle", () => {
+  it("words a replayed refresh token in plain language", () => {
+    expect(eventTitle("refresh.reuse")).toBe("A sign-in token was used twice, so the session was ended");
+  });
+
+  it("shows the raw type for one it does not know", () => {
+    expect(eventTitle("something.new")).toBe("something.new");
+  });
+});
+
 describe("severityLook", () => {
   it("groups the five severities into info, warning and critical", () => {
     expect(severityLook("Info").level).toBe("info");
