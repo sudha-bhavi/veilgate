@@ -1,0 +1,28 @@
+# For trying the production stack on your own computer. Same as Caddyfile, except the certificate comes from Caddy's own
+# private authority ("tls internal") instead of Let's Encrypt, so the browser will warn about it. Use it with:
+#   CADDYFILE=./Caddyfile.local   and   VG_DOMAIN=veilgate.test   plus a line "127.0.0.1 veilgate.test" in /etc/hosts.
+# (The API refuses "localhost" as the public address, which is why the example name is veilgate.test.)
+{
+	email {$ACME_EMAIL}
+	local_certs
+}
+
+{$VG_DOMAIN} {
+	encode zstd gzip
+
+	@internal path /health /health/*
+	respond @internal 404
+
+	request_body {
+		max_size 6MB
+	}
+
+	reverse_proxy api:8080
+
+	header -Server
+
+	log {
+		output stdout
+		format json
+	}
+}

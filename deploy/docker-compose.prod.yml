@@ -1,0 +1,174 @@
+# VeilGate, production-shaped stack on one machine. Read docs/operations.md before using it on a real server.
+#
+#   deploy/scripts/generate-secrets.sh <domain> <email>      (once: writes deploy/.env.prod with strong random secrets)
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+#
+# What is reachable from outside: Caddy on ports 80 and 443, and nothing else. PostgreSQL and Kafka have no published ports.
+# The workers, PostgreSQL and Kafka sit on a network with no route to the internet at all.
+name: veilgate-prod
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]   # a process in the container can never gain more rights than it started with
+  cap_drop: [ALL]                            # no Linux capabilities: it only needs to listen and talk
+  read_only: true                            # the container's own files cannot be changed while it runs
+  tmpfs: [/tmp]
+
+# The same secrets reach the API and the workers.
+x-secrets: &secrets
+  ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=veilgate;Username=vg_app;Password=${PG_APP_PASSWORD:?run deploy/scripts/generate-secrets.sh}"
+  Security__VaultKek: "${VAULT_KEK:?run deploy/scripts/generate-secrets.sh}"
+  Security__MfaEncryptionKey: "${MFA_ENCRYPTION_KEY:?run deploy/scripts/generate-secrets.sh}"
+
+services:
+  caddy:
+    <<: *hardening
+    image: caddy:2.8-alpine
+    cap_add: [NET_BIND_SERVICE]              # to listen on ports 80 and 443
+    ports: ["80:80", "443:443"]
+    environment:
+      VG_DOMAIN: "${VG_DOMAIN:?set VG_DOMAIN}"
+      ACME_EMAIL: "${ACME_EMAIL:?set ACME_EMAIL}"
+    volumes:
+      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data                     # the certificates: keep this, or Let's Encrypt limits are hit on every restart
+      - caddy_config:/config
+    networks:
+      edge:
+        ipv4_address: 172.30.0.250           # fixed, so the API can trust exactly this address as its proxy
+    depends_on:
+      api: { condition: service_healthy }
+    mem_limit: 256m
+
+  api:
+    <<: *hardening
+    build: { context: .., dockerfile: deploy/Dockerfile.api }
+    image: veilgate-api:${VG_VERSION:-latest}
+    environment:
+      <<: *secrets
+      ASPNETCORE_ENVIRONMENT: Production     # turns on the startup safety check: the API refuses unsafe settings
+      Auth__Keys__0__Kid: "${JWT_KID:?run deploy/scripts/generate-secrets.sh}"
+      Auth__Keys__0__PrivateKeyPem: "${JWT_PRIVATE_KEY_PEM:?run deploy/scripts/generate-secrets.sh}"
+      Cors__AllowedOrigins__0: "https://${VG_DOMAIN}"
+      Console__BaseUrl: "https://${VG_DOMAIN}"
+      AllowedHosts: "${VG_DOMAIN}"
+      SecurityHeaders__Hsts: "true"
+      Proxy__TrustedAddresses__0: "172.30.0.250"   # Caddy, and only Caddy
+      Smtp__Host: "${SMTP_HOST:?set SMTP_HOST in deploy/.env.prod}"
+      Smtp__Port: "${SMTP_PORT:-587}"
+      Smtp__From: "${SMTP_FROM:-no-reply@${VG_DOMAIN}}"
+      Smtp__UseStartTls: "true"
+      Smtp__User: "${SMTP_USER:-}"
+      Smtp__Password: "${SMTP_PASSWORD:-}"
+      Llm__AllowPrivateNetworks: "false"
+      Demo__Enabled: "false"
+    healthcheck:
+      # AllowedHosts only admits the real domain, so the check must present it as its Host header (the API refuses "localhost").
+      test: ["CMD", "wget", "-qO-", "--header", "Host: ${VG_DOMAIN}", "http://127.0.0.1:8080/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+    networks: [edge, backend]                # edge: the proxy and the internet (model providers); backend: the database
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    mem_limit: 768m
+
+  workers:
+    <<: *hardening
+    build: { context: .., dockerfile: deploy/Dockerfile.workers }
+    image: veilgate-workers:${VG_VERSION:-latest}
+    environment:
+      <<: *secrets
+      DOTNET_ENVIRONMENT: Production
+      Kafka__BootstrapServers: "kafka:9092"
+    networks: [backend]                      # no route to the internet
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      kafka-init: { condition: service_completed_successfully }
+    mem_limit: 512m
+
+  # Applies any migrations that are missing, then exits. Runs as the schema owner, never as the app login.
+  migrate:
+    build: { context: .., dockerfile: deploy/Dockerfile.migrate }
+    image: veilgate-migrate:${VG_VERSION:-latest}
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    # The migrations program is a single file that unpacks native parts when it starts. It needs somewhere writable that is
+    # also allowed to hold programs (Docker's default temporary area is not), so /tmp gets "exec" here, and only here.
+    tmpfs: ["/tmp:rw,exec,nosuid,size=128m"]
+    environment:
+      DOTNET_BUNDLE_EXTRACT_BASE_DIR: /tmp
+      VEILGATE_MIGRATOR_CONNECTION: "Host=postgres;Port=5432;Database=veilgate;Username=vg_migrator;Password=${PG_MIGRATOR_PASSWORD:?run deploy/scripts/generate-secrets.sh}"
+    networks: [backend]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${PG_ADMIN_PASSWORD:?run deploy/scripts/generate-secrets.sh}"
+      POSTGRES_DB: veilgate
+      PG_MIGRATOR_PASSWORD: "${PG_MIGRATOR_PASSWORD:?run deploy/scripts/generate-secrets.sh}"
+      PG_APP_PASSWORD: "${PG_APP_PASSWORD:?run deploy/scripts/generate-secrets.sh}"
+      PG_READONLY_PASSWORD: "${PG_READONLY_PASSWORD:?run deploy/scripts/generate-secrets.sh}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro   # creates the least-privilege roles on the first start
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d veilgate"]
+      interval: 5s
+      retries: 12
+    networks: [backend]
+    mem_limit: 1g
+
+  kafka:
+    image: redpandadata/redpanda:v24.2.7
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    command: >
+      redpanda start --overprovisioned --smp 1 --memory 768M --reserve-memory 0M
+      --node-id 0 --check=false
+      --kafka-addr internal://0.0.0.0:9092
+      --advertise-kafka-addr internal://kafka:9092
+    volumes:
+      - kafkadata:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info >/dev/null 2>&1"]
+      interval: 10s
+      retries: 12
+    networks: [backend]
+    mem_limit: 1g
+
+  # Creates the topics once and exits. Safe to run again.
+  kafka-init:
+    image: redpandadata/redpanda:v24.2.7
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until rpk -X brokers=kafka:9092 cluster info >/dev/null 2>&1; do sleep 1; done
+        rpk -X brokers=kafka:9092 topic create vg.gateway.requests.v1 vg.gateway.requests.v1.dlq -p 3 || true
+    networks: [backend]
+    depends_on:
+      kafka: { condition: service_healthy }
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          ip_range: 172.30.0.0/25            # automatic addresses come from the lower half, so they never collide with Caddy's fixed one
+  backend:
+    internal: true                           # containers here cannot reach the internet, and the internet cannot reach them
+
+volumes:
+  pgdata:
+  kafkadata:
+  caddy_data:
+  caddy_config:

@@ -8,6 +8,9 @@ obj/
 node_modules/
 dist/
 TestResults/
+.env.*
+!.env.example
+!.env.prod.example
 tools/pentest/.local/
 __pycache__/
 .DS_Store

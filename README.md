@@ -632,6 +632,25 @@ sheet and the findings log are empty on purpose, and nothing here claims the sys
   `Dockerfile.migrate` (applies migrations as a one-shot job from an EF Core migrations bundle, so the server needs neither the SDK
   nor the source; set `VEILGATE_MIGRATOR_CONNECTION` to the `vg_migrator` connection string). CI builds all three.
 
+### M7: the production stack
+
+`deploy/docker-compose.prod.yml` describes a production-shaped deployment on one machine. **Nothing here has been put on a server**, and
+the penetration test has not been run: do that before exposing it to the internet.
+
+- **Reachable from outside: Caddy on ports 80 and 443, and nothing else.** Caddy gets and renews a Let's Encrypt certificate by itself,
+  keeps `/health` away from the internet, refuses bodies over 6 MB, and replaces any `X-Forwarded-For` a client sends. PostgreSQL and
+  Kafka publish no ports. The workers, PostgreSQL and Kafka sit on a network with **no route to the internet**.
+- **Hardened containers.** The API, workers and proxy run read-only, with every Linux capability dropped (the proxy keeps only the right to
+  bind ports 80 and 443), `no-new-privileges`, memory limits and restart-on-failure.
+- **Secrets are generated, not invented.** `deploy/scripts/generate-secrets.sh <domain> <email>` writes `deploy/.env.prod` (mode 600, git-ignored,
+  never overwritten) with random database passwords, the vault and MFA keys, and an ES256 signing key. Mail settings are left empty on
+  purpose: the API refuses to start until they are set, and the startup safety check refuses anything unsafe.
+- **Migrations run as a one-shot job** (`migrate`) as the schema owner, before the API and workers start. The API only ever connects as `vg_app`.
+- **Trying it on your own computer.** Use `CADDYFILE=./Caddyfile.local` and `VG_DOMAIN=veilgate.test` with `127.0.0.1 veilgate.test` in
+  `/etc/hosts`; the certificate then comes from Caddy's own authority and the browser will warn about it.
+- CI checks that the compose file parses, that the secrets script writes a complete file with 32-byte keys and mode 600, and that it
+  refuses to overwrite an existing one.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):

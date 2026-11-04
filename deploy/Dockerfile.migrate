@@ -19,5 +19,7 @@ RUN RID=$( [ "$TARGETARCH" = "arm64" ] && echo linux-arm64 || echo linux-x64 ) \
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS final
 WORKDIR /app
 COPY --from=build /out/efbundle .
+# A single-file program unpacks native parts at start. The user's home folder does not exist in this image, so use /tmp.
+ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp
 USER app
 ENTRYPOINT ["./efbundle"]
