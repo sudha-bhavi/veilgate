@@ -506,6 +506,22 @@ GET /api/v1/requests/actions    the actions that occur, for a filter list
 - **In the console.** Requests lists the calls with filters (kept in the address bar, so a view can be bookmarked) and a pager; each
   row opens its own page.
 
+### M6: the Dashboard
+
+```
+GET /api/v1/dashboard/summary?range=24h|7d|30d
+GET /api/v1/dashboard/timeseries?range=24h|7d|30d&metric=requests|entities|latency
+```
+
+- **Where the numbers come from.** The hourly counters that the metrics consumer keeps, so they lag the gateway by a moment. Every
+  person of the tenant can read them; they are counts only.
+- **Summary.** Requests, items protected, blocked (denied) and failed calls, p50 and p95 latency, the leak rate of the newest successful
+  evaluation, items protected by type, and the five busiest callers (an API client or, for the Playground, a person).
+- **Charts.** The last 24 hours are hourly points; 7 and 30 days are daily points on UTC days. Every hour or day has a point, so a quiet
+  period shows as zero instead of a gap. The chart comes with a table of the same numbers.
+- **Latency is "up to".** Counters hold counts per latency band, so p50 and p95 are the upper limit of the band that holds them
+  (for example "up to 250 ms"), not an exact time.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
@@ -523,6 +539,8 @@ Where this project departs from the design documents (which were drafted with AI
   a status column the documents do not have.
 - **Order on retry.** Messages with the same key are published in creation order, but a retried message can arrive after a later
   one. The metrics consumer does not depend on order.
+- **No security events on the Dashboard.** The documents list `recentSecurityEvents` in the summary. Security events are filtered by role and
+  already have their own page, so the Dashboard links to it instead of repeating them.
 - **Requests route and visibility.** The documents name the controller `gateway-requests` and apply an ownership filter for Developers
   elsewhere. Here the route is `/api/v1/requests`, and every tenant role sees all of the tenant's requests, because a row holds only
   counts and names.
