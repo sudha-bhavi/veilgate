@@ -573,7 +573,7 @@ kind of door the outbox publisher uses, because these workers have no tenant):
 - **Secret scan** (job `secret-scan`): runs the free gitleaks image over the whole git history on every pull request and fails if it finds a
   committed key or password. `.gitleaks.toml` allows only the made-up `change-me-*` development placeholders. To run it yourself:
   `docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 detect --source /repo --config /repo/.gitleaks.toml --redact`.
-- **Not done yet:** pinning third-party actions to a commit SHA (only GitHub's own `actions/*` are used so far), a ZAP web scan,
+- **Not done yet:** pinning third-party actions to a commit SHA (only GitHub's own `actions/*` are used so far), a ZAP web scan in CI (a local script exists: `tools/zap/baseline.sh`, one run so far reached only 404 pages and proved nothing, see `docs/pentest/zap.md`),
   and the staging and production deploy workflows from the Deployment document.
 
 ### M7: automated security checks

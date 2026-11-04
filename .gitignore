@@ -15,3 +15,6 @@ deploy/backups/
 tools/pentest/.local/
 __pycache__/
 .DS_Store
+
+# ZAP scan reports
+tools/zap/out/
