@@ -1,0 +1,16 @@
+# The background workers: outbox publisher, metrics aggregator, evaluation runner, vault purger and session reaper.
+# Built from the repository root:  docker build -f deploy/Dockerfile.workers -t veilgate-workers .
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY Directory.Build.props global.json ./
+COPY src ./src
+RUN dotnet restore src/VeilGate.Workers/VeilGate.Workers.csproj
+RUN dotnet publish src/VeilGate.Workers/VeilGate.Workers.csproj -c Release -o /out --no-restore /p:UseAppHost=false
+
+# The Debian-based runtime (not Alpine): the Kafka client ships a native library that is built for it.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+COPY --from=build /out .
+ENV DOTNET_ENVIRONMENT=Production DOTNET_EnableDiagnostics=0
+USER app
+ENTRYPOINT ["dotnet", "VeilGate.Workers.dll"]

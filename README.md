@@ -620,6 +620,18 @@ sheet and the findings log are empty on purpose, and nothing here claims the sys
   never touches the demo organisation.
 - The helpers have their own unit tests (RFC 6238 one-time-password vectors, parallel firing, the local-only guard) that run in CI.
 
+### M7: behind a proxy, and in containers
+
+- **Real caller addresses behind a reverse proxy.** Without this, every request would appear to come from the proxy: the sign-in
+  limit would be shared by all users at once, API clients' IP allowlists would compare the proxy's address, and audit and security
+  events would name the proxy. The API now believes `X-Forwarded-For` and `X-Forwarded-Proto` **only** from the proxy you configure
+  (`Proxy__TrustedNetworks__0=172.16.0.0/12`, or `Proxy__TrustedAddresses__0=10.0.0.2`), only the hop nearest to it, and never
+  from anyone else, so a caller cannot choose their own address. With nothing configured the headers are ignored (right when the
+  API is exposed directly). The production safety check refuses a trusted network of `/0` (trust everyone).
+- **Three images** built from `deploy/`: `Dockerfile.api` (also serves the console), `Dockerfile.workers` (all background workers) and
+  `Dockerfile.migrate` (applies migrations as a one-shot job from an EF Core migrations bundle, so the server needs neither the SDK
+  nor the source; set `VEILGATE_MIGRATOR_CONNECTION` to the `vg_migrator` connection string). CI builds all three.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
@@ -637,6 +649,10 @@ Where this project departs from the design documents (which were drafted with AI
   a status column the documents do not have.
 - **Order on retry.** Messages with the same key are published in creation order, but a retried message can arrive after a later
   one. The metrics consumer does not depend on order.
+- **No Redis in a deployment.** The documents list Redis for sessions and rate limits. The application does not use it anywhere (sessions are
+  in PostgreSQL and the limits are in memory), so the development compose file starts an unused container and a production
+  deployment leaves it out. The rate limits are per process, which is correct for one API instance; running several would need a shared
+  limiter.
 - **No CSRF token.** The penetration test plan expects `403 csrf.invalid` on the cookie endpoints. Here the refresh cookie is
   `HttpOnly; Secure; SameSite=Strict` and scoped to `/api/v1/auth`, so a cross-site page cannot make the browser send it, and CORS
   allows exact origins only. The pen-test runbook says to test it anyway and record the result as a pass with a note or as an accepted

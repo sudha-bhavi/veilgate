@@ -146,8 +146,11 @@ try
 
     builder.WebHost.ConfigureKestrel(k => k.AddServerHeader = false);
 
+    var behindProxy = builder.Services.AddTrustedProxies(builder.Configuration);   // believe X-Forwarded-* only from configured proxies
+
     var app = builder.Build();
 
+    if (behindProxy) app.UseForwardedHeaders();   // first: everything after it (rate limits, allowlists, audit) sees the real caller address
     app.UseMiddleware<ExceptionHandlingMiddleware>();
     app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseStaticFiles();   // the built console in wwwroot (the Docker image puts it there); its files are public, so before authentication

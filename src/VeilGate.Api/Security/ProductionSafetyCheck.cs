@@ -73,6 +73,10 @@ public static class ProductionSafetyCheck
         if (Flag(c, "Llm:AllowPrivateNetworks"))
             problems.Add("Llm:AllowPrivateNetworks is true. That switches off the protection against calls to internal addresses (SSRF).");
 
+        if (c.GetSection("Proxy:TrustedNetworks").GetChildren().Any(n => n.Value?.Trim().EndsWith("/0", StringComparison.Ordinal) == true))
+            problems.Add("Proxy:TrustedNetworks trusts every address (a /0 network), so anyone could forge their IP address with an X-Forwarded-For header. "
+                         + "List only the proxy's own network.");
+
         if (Int(c, "Auth:AccessTokenMinutes", 10) > MaximumAccessTokenMinutes)
             problems.Add($"Auth:AccessTokenMinutes is above {MaximumAccessTokenMinutes}. A stolen access token would stay useful for too long.");
         if (Int(c, "Auth:LoginRateLimitPerMinute", 10) > MaximumLoginsPerMinute)

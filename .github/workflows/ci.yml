@@ -68,15 +68,21 @@ jobs:
         run: npm test
 
   api-image:
-    name: API container builds
+    name: Container images build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
-      # Built, not pushed anywhere: this only proves the image still builds.
-      - name: Build the image
+      # Built, not pushed anywhere: this only proves the images still build.
+      - name: Build the API image
         run: docker build -f deploy/Dockerfile.api -t veilgate-api:ci .
+
+      - name: Build the workers image
+        run: docker build -f deploy/Dockerfile.workers -t veilgate-workers:ci .
+
+      - name: Build the migration image
+        run: docker build -f deploy/Dockerfile.migrate -t veilgate-migrate:ci .
 
   pentest-tooling:
     name: Pen-test helper tests
