@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditChainVerifier, AuditChainVerifier>();
         services.AddScoped<IAuditEventReader, AuditEventReader>();
         services.AddScoped<IOutbox, EfOutbox>();
+        services.AddScoped<IGatewayRequestReader, GatewayRequestReader>();
         services.AddScoped<IOutboxStore, Messaging.PostgresOutboxStore>();
         services.AddSingleton<IGatewayEventProjector, Messaging.GatewayEventProjector>();
         services.AddScoped<ISecurityEventWriter, SecurityEventWriter>();
