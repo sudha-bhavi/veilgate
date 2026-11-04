@@ -1,5 +1,5 @@
 # The console is built here and served by the API from wwwroot, on the same origin (the refresh cookie needs that).
-FROM node:22-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /web
 COPY src/VeilGate.Web/package.json src/VeilGate.Web/package-lock.json ./
 RUN npm ci
