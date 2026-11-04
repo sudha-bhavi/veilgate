@@ -93,8 +93,9 @@ More of the console:
 | M6        | Kafka outbox, workers, dashboards                                                                   | ✅ Done |
 | M7        | Hardening, pen test, deployment                                                                     | 🚧 In progress |
 
-In the console, Settings is marked "Not built yet": its server side is not written.
-Everything else works end to end, including the Security page (sessions, two-step sign-in, password and security
+In the console, Settings is read-only: it shows the organisation and the server-wide sign-in and session rules (`GET /api/v1/settings`,
+Tenant Admins only). Renaming the organisation, a default policy and request-history retention are not built (the app's database role
+cannot write the tenants table by design). Everything else works end to end, including the Security page (sessions, two-step sign-in, password and security
 events). Passkeys are not built yet.
 
 ## Run it locally

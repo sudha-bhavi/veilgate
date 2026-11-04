@@ -39,6 +39,7 @@ import UsersPage from "./pages/UsersPage";
 import AcceptInvitePage from "./pages/AcceptInvitePage";
 import SecurityPage from "./pages/SecurityPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
+import SettingsPage from "./pages/SettingsPage";
 import DashboardPage from "./pages/DashboardPage";
 import RequestDetailPage from "./pages/RequestDetailPage";
 import RequestsPage from "./pages/RequestsPage";
@@ -125,6 +126,7 @@ export default function App() {
         <Route element={<RequireAuth roles={USER_ADMIN_ROLES} />}>
           <Route element={<AppShell />}>
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Route>
 

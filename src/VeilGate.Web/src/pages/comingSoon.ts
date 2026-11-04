@@ -7,15 +7,5 @@ export type ComingSoon = {
 };
 
 // Sections that are in the plan but whose server side is not built yet. Each page says so plainly instead of pretending.
-export const COMING_SOON: readonly ComingSoon[] = [
-  {
-    path: "/settings",
-    title: "Settings",
-    summary: "Organisation-wide choices.",
-    planned: [
-      "The organisation's name and default policy",
-      "How long to keep request history",
-      "Sign-in and idle timeout rules",
-    ],
-  },
-];
+// Empty for now: every sidebar section is built.
+export const COMING_SOON: readonly ComingSoon[] = [];
