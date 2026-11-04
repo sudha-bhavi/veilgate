@@ -111,7 +111,7 @@ public class LlmProviderTests
     [InlineData("https://api.example.com", "https://api.example.com")]
     [InlineData("https://API.Example.com/", "https://api.example.com")]
     [InlineData("https://api.example.com/openai/", "https://api.example.com/openai")]
-    [InlineData("https://api.example.com:8443/v1", "https://api.example.com:8443/v1")]
+    [InlineData("https://api.example.com:8443/openai/", "https://api.example.com:8443/openai")]
     [InlineData("https://api.example.com:443", "https://api.example.com")]
     [InlineData("  http://localhost:8089  ", "http://localhost:8089")]
     public void An_address_is_stored_in_one_canonical_spelling(string input, string expected)
@@ -130,6 +130,8 @@ public class LlmProviderTests
     [InlineData("https://api.example.com?key=abc")]       // query
     [InlineData("https://api.example.com/#frag")]
     [InlineData("https://")]
+    [InlineData("https://api.example.com/v1")]            // VeilGate adds /v1/chat/completions itself
+    [InlineData("https://api.example.com/openai/V1/")]
     public void An_unsafe_or_malformed_address_is_refused(string input)
         => LlmProvider.TryNormalizeBaseUrl(input, out _).Should().BeFalse();
 

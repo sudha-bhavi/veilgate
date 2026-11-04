@@ -18,7 +18,7 @@ public sealed class CreateLlmProviderHandler(
     public async Task<Result<LlmProviderView>> HandleAsync(CreateLlmProviderCommand cmd, CancellationToken ct = default)
     {
         // Cheap checks first; the address check can involve a DNS lookup.
-        if (!LlmProvider.TryNormalizeBaseUrl(cmd.BaseUrl, out var url)) return Error.Validation("validation.failed", "Invalid provider URL.");
+        if (!LlmProvider.TryNormalizeBaseUrl(cmd.BaseUrl, out var url)) return Error.Validation("validation.failed", "Invalid provider URL. Give the address without a trailing /v1; VeilGate adds that part itself.");
         if (!LlmProviderKeys.IsAcceptable(cmd.ApiKey))
             return Error.Validation("validation.failed", $"API key must be {LlmProviderKeys.MinKeyLength} to {LlmProviderKeys.MaxKeyLength} characters.");
 
@@ -59,7 +59,7 @@ public sealed class UpdateLlmProviderHandler(
         var provider = await providers.FindAsync(cmd.Id, ct);
         if (provider is null) return Error.NotFound();
 
-        if (!LlmProvider.TryNormalizeBaseUrl(cmd.BaseUrl, out var url)) return Error.Validation("validation.failed", "Invalid provider URL.");
+        if (!LlmProvider.TryNormalizeBaseUrl(cmd.BaseUrl, out var url)) return Error.Validation("validation.failed", "Invalid provider URL. Give the address without a trailing /v1; VeilGate adds that part itself.");
         if (cmd.ApiKey is not null && !LlmProviderKeys.IsAcceptable(cmd.ApiKey))
             return Error.Validation("validation.failed", $"API key must be {LlmProviderKeys.MinKeyLength} to {LlmProviderKeys.MaxKeyLength} characters.");
 
