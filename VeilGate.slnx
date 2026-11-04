@@ -13,6 +13,7 @@
     <Project Path="tests/VeilGate.TestSupport/VeilGate.TestSupport.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/VeilGate.Bootstrap/VeilGate.Bootstrap.csproj" />
     <Project Path="tools/VeilGate.Seeder/VeilGate.Seeder.csproj" />
   </Folder>
 </Solution>

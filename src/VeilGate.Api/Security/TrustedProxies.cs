@@ -27,9 +27,9 @@ public static class TrustedProxies
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
             // Believe only the hop nearest to us. Entries a client put at the front of the header are never used.
             options.ForwardLimit = 1;
-            options.KnownNetworks.Clear();   // the defaults trust loopback; we trust exactly what is configured
+            options.KnownIPNetworks.Clear();   // the defaults trust loopback; we trust exactly what is configured
             options.KnownProxies.Clear();
-            foreach (var network in networks) options.KnownNetworks.Add(network);
+            foreach (var network in networks) options.KnownIPNetworks.Add(network);
             foreach (var address in addresses) options.KnownProxies.Add(address);
         });
         return true;
@@ -38,14 +38,14 @@ public static class TrustedProxies
     private static IEnumerable<string> Values(IConfiguration configuration, string name) =>
         configuration.GetSection($"{Section}:{name}").GetChildren().Select(c => c.Value).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!.Trim());
 
-    public static Microsoft.AspNetCore.HttpOverrides.IPNetwork ParseNetwork(string text)
+    public static System.Net.IPNetwork ParseNetwork(string text)
     {
         var parts = text.Split('/');
         if (parts.Length != 2 || !System.Net.IPAddress.TryParse(parts[0], out var address) || !int.TryParse(parts[1], out var prefix)
             || prefix < 0 || prefix > (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 32 : 128))
             throw new InvalidOperationException($"{Section}:TrustedNetworks has an entry that is not a network such as 172.16.0.0/12.");
 
-        return new Microsoft.AspNetCore.HttpOverrides.IPNetwork(address, prefix);
+        return new System.Net.IPNetwork(address, prefix);
     }
 
     public static System.Net.IPAddress ParseAddress(string text) =>

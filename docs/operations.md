@@ -37,7 +37,18 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod <co
 6. **Start:** `up -d --build`. The first build takes several minutes.
 7. **Check:** `ps -a` should show `migrate` and `kafka-init` as `Exited (0)` and the rest `running` or `healthy`. Then open
    `https://<domain>`.
-8. **Try it before trusting it:** run a backup and a restore drill (below), and run the penetration test (`docs/pentest/`).
+8. **Create the first administrator.** A fresh database has no organisation and no users. This one-time command creates both and prints a
+   single-use link for the person who will administer it (they choose a password and set up their authenticator when they open it):
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod run --rm bootstrap --organisation "Your Organisation" --email you@example.com --name "Your Name"
+```
+
+   Send them the link it prints. It works once and expires after 48 hours, like every invitation. VeilGate keeps only a fingerprint of it, so it
+   cannot be shown again. **If it is lost before it was used**, make a new one (the old one stops working):
+   `... run --rm bootstrap --reissue`. The command refuses to run if any organisation already exists, so it can never be used later to add an
+   administrator by the back door. Everyone else is invited from the console.
+9. **Try it before trusting it:** run a backup and a restore drill (below), and run the penetration test (`docs/pentest/`).
 
 To rehearse on your own computer first, use `CADDYFILE=./Caddyfile.local` and a made-up name such as `veilgate.test` with
 `127.0.0.1 veilgate.test` in `/etc/hosts`. The browser will warn about the certificate, which is expected.
@@ -145,10 +156,9 @@ Daily, a few minutes (Document 08, section 6.6). All commands use the compose pr
 
 ## Known gaps
 
-- **No first-administrator bootstrap.** A fresh production database has no organisation and no users. The seeder (`tools/VeilGate.Seeder`)
-  refuses any database that is not on the same machine by design, and the platform "create tenant" endpoint is not built. Document 08's
-  go-live checklist expects "bootstrap invitation used and expired". Until a bootstrap step exists, a production-shaped stack can be
-  started and inspected, but not signed in to without a manual database step. This is the next thing to build.
+- **No demo data in a production-shaped stack.** The first administrator is created by the bootstrap command, but the seeder (sample
+  policies, an API client, a dataset) refuses any database that is not on the same machine by design, so a public read-only demo would need
+  its sample data loaded another way. There is also no "platform admin" who can create further organisations: the platform endpoints are not built.
 - **No monitoring or alerting stack.** The "What to watch" list is manual. Document 08 section 6.1 describes alerts (availability, error
   rate, latency, sign-in failures); none of those are wired up.
 - **One machine, no failover**, and rate limits are per process.
@@ -160,7 +170,7 @@ Daily, a few minutes (Document 08, section 6.6). All commands use the compose pr
 |---|---|
 | Penetration test plan executed, no open Critical or High findings | **Not done** (plan and tooling exist) |
 | ZAP baseline and image scans clean | Not done (dependency audit runs in CI; no ZAP) |
-| MFA enforced for all users; seed accounts removed; bootstrap invitation used | Partly: MFA is required at first sign-in; no bootstrap yet |
+| MFA enforced for all users; seed accounts removed; bootstrap invitation used | MFA is required at first sign-in; the production stack has no seed accounts; the bootstrap link is single-use and expires in 48 hours. **You must confirm it was used.** |
 | WAF in prevention mode; rate limits; health endpoints internal only | Rate limits and internal-only health: done. WAF: none |
 | CORS, CSP and HSTS set for the production domain | Done, and the API refuses to start without them |
 | Migrations applied; RLS enabled and forced on all tenant tables (automated check) | Done, checked on every test run |

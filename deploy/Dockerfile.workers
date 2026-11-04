@@ -11,6 +11,8 @@ RUN dotnet publish src/VeilGate.Workers/VeilGate.Workers.csproj -c Release -o /o
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /out .
+# The database driver looks for the Kerberos library at start-up. It is optional, but without it the logs start with a scary-looking error.
+RUN apt-get update && apt-get install -y --no-install-recommends libgssapi-krb5-2 && rm -rf /var/lib/apt/lists/*
 ENV DOTNET_ENVIRONMENT=Production DOTNET_EnableDiagnostics=0
 USER app
 ENTRYPOINT ["dotnet", "VeilGate.Workers.dll"]

@@ -84,6 +84,9 @@ jobs:
       - name: Build the migration image
         run: docker build -f deploy/Dockerfile.migrate -t veilgate-migrate:ci .
 
+      - name: Build the bootstrap image
+        run: docker build -f deploy/Dockerfile.bootstrap -t veilgate-bootstrap:ci .
+
   deployment-files:
     name: Deployment files are valid
     runs-on: ubuntu-latest
@@ -132,6 +135,14 @@ jobs:
           sed -i 's/^SMTP_HOST=$/SMTP_HOST=smtp.example.com/' deploy/.env.prod
           $COMPOSE up -d --build postgres migrate
           test "$(docker wait "$($COMPOSE ps -aq migrate)")" = "0"
+
+      - name: The first administrator can be created once, and only once
+        run: |
+          out="$($COMPOSE run --rm -T bootstrap --organisation 'CI Org' --email admin@example.com --name 'CI Admin')"
+          echo "$out" | grep -q 'https://veilgate.example.com/accept-invite?token='
+          ! $COMPOSE run --rm -T bootstrap --organisation 'Second Org' --email other@example.com --name 'Other'
+          # a lost link can be replaced while the administrator has not signed up
+          $COMPOSE run --rm -T bootstrap --reissue | grep -q 'accept-invite?token='
 
       - name: Put something in the database to protect
         run: |

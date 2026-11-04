@@ -1,0 +1,18 @@
+# One-time setup tool: creates the first organisation and its first administrator (see tools/VeilGate.Bootstrap).
+# Built from the repository root:  docker build -f deploy/Dockerfile.bootstrap -t veilgate-bootstrap .
+# Run through compose, which supplies the schema owner's connection:  see docs/operations.md, "Create the first administrator".
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY Directory.Build.props global.json ./
+COPY src ./src
+COPY tools/VeilGate.Bootstrap ./tools/VeilGate.Bootstrap
+RUN dotnet restore tools/VeilGate.Bootstrap/VeilGate.Bootstrap.csproj
+RUN dotnet publish tools/VeilGate.Bootstrap/VeilGate.Bootstrap.csproj -c Release -o /out --no-restore /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+COPY --from=build /out .
+# The database driver looks for the Kerberos library at start-up. It is optional, but without it every run prints a scary-looking error.
+RUN apt-get update && apt-get install -y --no-install-recommends libgssapi-krb5-2 && rm -rf /var/lib/apt/lists/*
+USER app
+ENTRYPOINT ["dotnet", "VeilGate.Bootstrap.dll"]

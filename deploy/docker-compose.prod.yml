@@ -158,6 +158,24 @@ services:
     depends_on:
       kafka: { condition: service_healthy }
 
+  # Not started by "up": run it once, on demand, to create the first organisation and its first administrator.
+  #   docker compose ... run --rm bootstrap --organisation "Acme Health" --email you@example.com --name "Your Name"
+  # It prints a single-use link for that person. It refuses to run if any organisation already exists.
+  bootstrap:
+    profiles: ["bootstrap"]
+    build: { context: .., dockerfile: deploy/Dockerfile.bootstrap }
+    image: veilgate-bootstrap:${VG_VERSION:-latest}
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    environment:
+      VEILGATE_MIGRATOR_CONNECTION: "Host=postgres;Port=5432;Database=veilgate;Username=vg_migrator;Password=${PG_MIGRATOR_PASSWORD:?run deploy/scripts/generate-secrets.sh}"
+      CONSOLE_BASE_URL: "https://${VG_DOMAIN:?set VG_DOMAIN}"
+    networks: [backend]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
 networks:
   edge:
     ipam:
