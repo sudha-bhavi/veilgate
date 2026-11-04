@@ -665,9 +665,14 @@ watch every day, the operations calendar from Document 08, a troubleshooting tab
   live database.
 - **CI runs both** against a real PostgreSQL: it makes a backup, checks that old ones are removed and the file is private, restores it, and
   checks that a damaged backup is caught.
-- **Known gaps, written down in the runbook:** there is no first-administrator bootstrap (a fresh production database has no organisation or
-  users, and the seeder refuses non-local databases by design), no monitoring or alerting stack, and no high availability. The penetration test
-  has not been run.
+- **The first administrator.** A fresh production database has no organisation or users, and the seeder refuses non-local databases by design,
+  so there is a one-time command: `docker compose ... run --rm bootstrap --organisation "..." --email ... --name "..."`. It creates the first
+  organisation and its first Tenant Admin **with no password**, and prints one ordinary invitation link (single use, 48 hours, only a
+  fingerprint is stored), so there is no second, weaker way in. It refuses to run if any organisation already exists, even when two
+  operators run it at once, so it cannot be used later to add an administrator by the back door. `--reissue` makes a new link if the first was
+  lost, but only while that one administrator has still not signed up. The organisation's audit log starts with a `tenant.bootstrap` event.
+- **Known gaps, written down in the runbook:** no demo data in a production-shaped stack (the seeder is development-only), no platform admin to
+  create further organisations, no monitoring or alerting stack, and no high availability. The penetration test has not been run.
 
 ### Decisions
 
