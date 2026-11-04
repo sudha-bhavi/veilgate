@@ -1,3 +1,5 @@
+using VeilGate.Domain.Messaging;
+
 namespace VeilGate.Domain.Metrics;
 
 /// <summary>
@@ -28,4 +30,12 @@ public sealed class GatewayRequestRecord
     public IReadOnlyDictionary<string, int> Entities { get; init; } = new Dictionary<string, int>();
     public long? LatencyMs { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
+
+    /// <summary>The Requests-page row for an event. <paramref name="messageId"/> is the id of the message that carried it.</summary>
+    public static GatewayRequestRecord From(Guid messageId, GatewayRequestEvent e) => new()
+    {
+        Id = messageId, TenantId = e.TenantId, ClientId = e.ClientId, ActorType = e.ActorType, RequestId = e.RequestId,
+        Action = e.Action, Status = e.Result, Reason = e.Reason, Model = e.Model, Provider = e.Provider, PolicyVersion = e.PolicyVersion,
+        EntityCount = e.Entities.Values.Sum(), Entities = new Dictionary<string, int>(e.Entities), LatencyMs = e.LatencyMs, CreatedAt = e.OccurredAt,
+    };
 }
