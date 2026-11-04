@@ -11,6 +11,7 @@ TestResults/
 .env.*
 !.env.example
 !.env.prod.example
+deploy/backups/
 tools/pentest/.local/
 __pycache__/
 .DS_Store

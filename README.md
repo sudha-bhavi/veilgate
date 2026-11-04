@@ -651,6 +651,24 @@ the penetration test has not been run: do that before exposing it to the interne
 - CI checks that the compose file parses, that the secrets script writes a complete file with 32-byte keys and mode 600, and that it
   refuses to overwrite an existing one.
 
+### M7: backups, restore drill and the runbook
+
+`docs/operations.md` is the runbook for the production stack: first deployment, updates, rollback, backups, restoring, rotating secrets, what to
+watch every day, the operations calendar from Document 08, a troubleshooting table, and the go-live checklist with an honest state for every item.
+
+- **`deploy/scripts/backup.sh`** dumps the whole database to a compressed file, reads it back to prove it is usable, writes a checksum, keeps
+  files readable only by you, and removes backups older than 14 days. It reminds you that the secrets file is not in the dump and must be kept
+  separately: without the vault and MFA keys, protected data cannot be read again.
+- **`deploy/scripts/restore-drill.sh`** restores the newest backup into a scratch database next to the live one and checks it: the checksum, a
+  restore without errors, the same tables, and that **row-level security is enabled, forced and has its policies after the restore**, and
+  hides data from the app role when no tenant is chosen. It prints how long the restore took (your real recovery time) and never touches the
+  live database.
+- **CI runs both** against a real PostgreSQL: it makes a backup, checks that old ones are removed and the file is private, restores it, and
+  checks that a damaged backup is caught.
+- **Known gaps, written down in the runbook:** there is no first-administrator bootstrap (a fresh production database has no organisation or
+  users, and the seeder refuses non-local databases by design), no monitoring or alerting stack, and no high availability. The penetration test
+  has not been run.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
