@@ -39,6 +39,8 @@ import UsersPage from "./pages/UsersPage";
 import AcceptInvitePage from "./pages/AcceptInvitePage";
 import SecurityPage from "./pages/SecurityPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
+import RequestDetailPage from "./pages/RequestDetailPage";
+import RequestsPage from "./pages/RequestsPage";
 import { COMING_SOON } from "./pages/comingSoon";
 
 export default function App() {
@@ -122,6 +124,14 @@ export default function App() {
         <Route element={<RequireAuth roles={USER_ADMIN_ROLES} />}>
           <Route element={<AppShell />}>
             <Route path="/users" element={<UsersPage />} />
+          </Route>
+        </Route>
+
+        {/* Requests: every tenant role, because a row holds counts and names, never text. */}
+        <Route element={<RequireAuth roles={ALL_TENANT_ROLES} />}>
+          <Route element={<AppShell />}>
+            <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/requests/:id" element={<RequestDetailPage />} />
           </Route>
         </Route>
 

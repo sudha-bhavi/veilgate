@@ -19,16 +19,6 @@ export const COMING_SOON: readonly ComingSoon[] = [
     ],
   },
   {
-    path: "/requests",
-    title: "Requests",
-    summary: "A searchable history of what went through the gateway.",
-    planned: [
-      "When each request happened, which client sent it and which policy applied",
-      "How many items were protected in each, never the text itself",
-      "Filters by client, policy and time",
-    ],
-  },
-  {
     path: "/settings",
     title: "Settings",
     summary: "Organisation-wide choices.",
