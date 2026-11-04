@@ -1,0 +1,19 @@
+# Settings for the secret scanner (gitleaks). It keeps gitleaks' built-in rules and only lists the made-up development values
+# this repository commits on purpose: they are placeholders for a local database, not real credentials.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholder passwords used by the local development setup"
+regexes = [
+  '''change-me(-[a-z]+)?''',
+]
+paths = [
+  '''\.env\.example$''',
+  '''appsettings\.Development\.json$''',
+  '''deploy/\.env\.prod\.example$''',       # a template: every value says "replace"
+  # Test files hold made-up keys and tokens on purpose (for example sk-live-0123456789abcd, RFC test vectors).
+  '''^tests/''',
+  '''\.test\.tsx?$''',
+  '''^tools/pentest/test_vg\.py$''',
+]

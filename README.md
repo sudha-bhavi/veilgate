@@ -570,7 +570,10 @@ kind of door the outbox publisher uses, because these workers have no tenant):
 - **Dependency audit:** NuGet and npm packages are checked against known vulnerabilities. It reports without failing the run for now;
   remove `continue-on-error` in the workflow once it is clean to make it a gate.
 - **Dependabot** (`.github/dependabot.yml`) opens weekly pull requests for NuGet, npm, GitHub Actions and Docker updates.
-- **Not done yet:** pinning third-party actions to a commit SHA (only GitHub's own `actions/*` are used so far), a secret scanner,
+- **Secret scan** (job `secret-scan`): runs the free gitleaks image over the whole git history on every pull request and fails if it finds a
+  committed key or password. `.gitleaks.toml` allows only the made-up `change-me-*` development placeholders. To run it yourself:
+  `docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 detect --source /repo --config /repo/.gitleaks.toml --redact`.
+- **Not done yet:** pinning third-party actions to a commit SHA (only GitHub's own `actions/*` are used so far), a ZAP web scan,
   and the staging and production deploy workflows from the Deployment document.
 
 ### M7: automated security checks
@@ -601,7 +604,7 @@ Some safety rules are checked by the test suite on every run (and so by CI), so 
   (`Llm:AllowPrivateNetworks`), the access token lives longer than 15 minutes, or the sign-in limit is above 30 a minute (so it
   cannot be left raised after a penetration test). The messages name the setting and the reason, never its value. Missing signing
   keys were already refused outside Development.
-- **Not done yet:** finishing the penetration test (the plan is Document 06; it has been started, see `docs/pentest/results.md`) and a secret scanner in CI.
+- **Not done yet:** finishing the penetration test (the plan is Document 06; it has been started, see `docs/pentest/results.md`) and a ZAP web scan in CI.
 
 ### M7: penetration test tooling
 
