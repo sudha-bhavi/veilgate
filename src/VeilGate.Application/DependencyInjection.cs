@@ -77,6 +77,9 @@ public static class DependencyInjection
         services.AddScoped<Auth.DemoSignInHandler>();
 
         services.AddScoped<Audit.ListAuditEventsHandler>();
+        services.AddScoped<Requests.ListGatewayRequestsHandler>();
+        services.AddScoped<Requests.GetGatewayRequestHandler>();
+        services.AddScoped<Requests.ListRequestActionsHandler>();
         services.AddScoped<Audit.ListSecurityEventsHandler>();
         services.AddScoped<Audit.ListSecurityEventPeopleHandler>();
         services.AddScoped<Audit.ListAuditActionsHandler>();

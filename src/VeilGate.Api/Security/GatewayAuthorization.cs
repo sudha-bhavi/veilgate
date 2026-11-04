@@ -47,6 +47,9 @@ public static class AuthPolicies
 
     /// <summary>Who sees the security events of the whole organization and may filter them by person (Security center, UI doc 7.1).</summary>
     public const string SecurityOversight = "SecurityOversight";
+
+    /// <summary>Who may read the gateway requests (counts and names, never text): every person of the tenant. API clients may not.</summary>
+    public const string RequestReader = "RequestReader";
         /// <summary>Who may create datasets and run evaluations: the people who write and approve policies.</summary>
     public const string EvaluationOperator = "EvaluationOperator";
 
@@ -124,6 +127,11 @@ public static class AuthPolicies
             .RequireRole("TenantAdmin", "SecurityOfficer", "Auditor"));
 
         options.AddPolicy(SecurityEventReader, p => p
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => !IsClientToken(ctx.User))
+            .RequireRole("TenantAdmin", "SecurityOfficer", "Developer", "Auditor"));
+
+        options.AddPolicy(RequestReader, p => p
             .RequireAuthenticatedUser()
             .RequireAssertion(ctx => !IsClientToken(ctx.User))
             .RequireRole("TenantAdmin", "SecurityOfficer", "Developer", "Auditor"));
