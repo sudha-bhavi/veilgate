@@ -61,10 +61,15 @@ public sealed class LoginHandler(
             return AccountLocked;
         }
 
+        // Count this attempt first, atomically; only then check the password (see TryReserveLoginAttemptAsync).
+        if (!await users.TryReserveLoginAttemptAsync(user, now, ct))
+        {
+            await auditor.DeniedAsync(user, AuthAuditor.SignIn, cmd.Ip, ct);
+            return AccountLocked;
+        }
+
         if (user.PasswordHash is null || !hasher.Verify(cmd.Password, user.PasswordHash))
         {
-            user.RegisterFailedLogin(now);
-            await users.SaveChangesAsync(ct);
             await auditor.FailedAsync(user, AuthAuditor.SignIn, "password", cmd.Ip, ct);
             return InvalidCredentials;
         }

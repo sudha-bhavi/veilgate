@@ -3,6 +3,8 @@ using NSubstitute;
 using VeilGate.Application.Abstractions;
 using VeilGate.Application.Auth;
 using VeilGate.Domain;
+using VeilGate.Domain.Audit;
+using Microsoft.Extensions.Logging.Abstractions;
 using VeilGate.Infrastructure.Persistence;
 using Xunit;
 
@@ -16,6 +18,7 @@ public class RefreshHandlerTests
     private readonly IUserRepository _users = Substitute.For<IUserRepository>();
     private readonly ITokenService _tokens = Substitute.For<ITokenService>();
     private readonly IClock _clock = Substitute.For<IClock>();
+    private readonly ISecurityEventWriter _events = Substitute.For<ISecurityEventWriter>();
     private readonly TenantContext _tenant = new();
 
     public RefreshHandlerTests()
@@ -23,9 +26,12 @@ public class RefreshHandlerTests
         _clock.UtcNow.Returns(Now);
         _users.IsTenantActiveAsync(Arg.Any<CancellationToken>()).Returns(true);
         _tokens.IssueAccessToken(Arg.Any<AccessTokenClaims>(), Arg.Any<DateTimeOffset?>()).Returns("new-access-token");
+        // A mocking library ignores the interface's default method, so the atomic swap is emulated the way the database does it.
+        _sessions.TryRotateAsync(Arg.Any<Session>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(call.Arg<Session>().Rotate(call.ArgAt<string>(1), call.ArgAt<string>(2), call.Arg<DateTimeOffset>()).IsSuccess));
     }
 
-    private RefreshHandler Handler() => new(_sessions, _users, _tenant, _tokens, _clock);
+    private RefreshHandler Handler() => new(_sessions, _users, _tenant, _tokens, _clock, _events, NullLogger<RefreshHandler>.Instance);
 
     // A signed-in user with one session that the (fake) database can find by its token.
     private (User user, Session session, string token) GivenSignedIn(bool demo = false)
@@ -119,5 +125,35 @@ public class RefreshHandlerTests
 
         _tokens.Received(1).IssueAccessToken(
             Arg.Is<AccessTokenClaims>(c => c.Amr.SequenceEqual(new[] { "pwd", "mfa" })), Arg.Any<DateTimeOffset?>());
+    }
+
+    [Fact]
+    public async Task Reusing_an_old_token_raises_a_high_refresh_reuse_security_event()
+    {
+        var (user, session, first) = GivenSignedIn();
+        (await Handler().HandleAsync(new RefreshCommand(first, "203.0.113.9"))).IsSuccess.Should().BeTrue();
+        await _events.DidNotReceive().WriteAsync(Arg.Any<SecurityEvent>(), Arg.Any<CancellationToken>());
+
+        await Handler().HandleAsync(new RefreshCommand(first, "203.0.113.9"));
+
+        await _events.Received(1).WriteAsync(
+            Arg.Is<SecurityEvent>(e => e.Type == "refresh.reuse" && e.Severity == Severity.High && e.UserId == user.Id && e.TenantId == session.TenantId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_request_that_loses_the_atomic_swap_is_a_replay_and_ends_the_session()
+    {
+        var (_, session, token) = GivenSignedIn();
+        // Another request swapped the token between this one's read and its swap.
+        _sessions.TryRotateAsync(session, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var r = await Handler().HandleAsync(new RefreshCommand(token));
+
+        r.Error.Should().Be(Session.RefreshReused);
+        session.RevokedAt.Should().NotBeNull();
+        await _events.Received(1).WriteAsync(Arg.Is<SecurityEvent>(e => e.Type == "refresh.reuse"), Arg.Any<CancellationToken>());
+        _tokens.DidNotReceive().IssueAccessToken(Arg.Any<AccessTokenClaims>(), Arg.Any<DateTimeOffset?>());
     }
 }

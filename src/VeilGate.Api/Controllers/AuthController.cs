@@ -30,7 +30,7 @@ public sealed class AuthController(
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh(CancellationToken ct)
     {
-        var result = await refresh.HandleAsync(new RefreshCommand(RefreshCookie.Read(Request)), ct);
+        var result = await refresh.HandleAsync(new RefreshCommand(RefreshCookie.Read(Request), CallerIp), ct);
         if (result.IsFailure)
         {
             RefreshCookie.Clear(Response);   // the token is dead, so tell the browser to drop it

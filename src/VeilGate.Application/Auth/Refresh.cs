@@ -1,16 +1,19 @@
+using Microsoft.Extensions.Logging;
 using VeilGate.Application.Abstractions;
 using VeilGate.Domain;
+using VeilGate.Domain.Audit;
 using VeilGate.Domain.Common;
 
 namespace VeilGate.Application.Auth;
 
-public sealed record RefreshCommand(string? RefreshToken);
+public sealed record RefreshCommand(string? RefreshToken, string? Ip = null);
 
 public sealed record RefreshResult(string AccessToken, string RefreshToken, DateTimeOffset RefreshExpiresAt);
 
 /// <summary>Swaps a refresh token for a new access token AND a new refresh token (rotation). A replayed old token ends the session.</summary>
 public sealed class RefreshHandler(
-    ISessionRepository sessions, IUserRepository users, ITenantContext tenant, ITokenService tokens, IClock clock)
+    ISessionRepository sessions, IUserRepository users, ITenantContext tenant, ITokenService tokens, IClock clock,
+    ISecurityEventWriter securityEvents, ILogger<RefreshHandler> logger)
 {
     public async Task<Result<RefreshResult>> HandleAsync(RefreshCommand cmd, CancellationToken ct = default)
     {
@@ -36,9 +39,31 @@ public sealed class RefreshHandler(
         }
 
         var newToken = RefreshTokens.Generate();
-        var rotated = session.Rotate(presented, RefreshTokens.Hash(newToken), now);
-        await sessions.SaveChangesAsync(ct);   // ALWAYS save: on reuse, Rotate just revoked the session and that must stick
-        if (rotated.IsFailure) return rotated.Error;
+        var newHash = RefreshTokens.Hash(newToken);
+
+        if (session.IsActive(now) && session.IsCurrentToken(presented))
+        {
+            // The newest token. Swap it in ONE database step: if another request swapped it a moment ago, this one lost, which means the
+            // same token was presented twice. That is a replay, handled like any other (read, rotate in memory, save would hand a new token to both).
+            if (!await sessions.TryRotateAsync(session, presented, newHash, now, ct))
+            {
+                session.Revoke("refresh_reuse", now);
+                await sessions.SaveChangesAsync(ct);
+                await RaiseReuseAsync(session, cmd.Ip, ct);
+                return Session.RefreshReused;
+            }
+            await sessions.SaveChangesAsync(ct);
+        }
+        else
+        {
+            var rotated = session.Rotate(presented, newHash, now);
+            await sessions.SaveChangesAsync(ct);   // ALWAYS save: on reuse, Rotate just revoked the session and that must stick
+            if (rotated.IsFailure)
+            {
+                if (rotated.Error == Session.RefreshReused) await RaiseReuseAsync(session, cmd.Ip, ct);
+                return rotated.Error;
+            }
+        }
 
         var accessToken = tokens.IssueAccessToken(new AccessTokenClaims(
             user.Id, user.TenantId, user.Role.ToString(),
@@ -48,5 +73,13 @@ public sealed class RefreshHandler(
             TokenVersion: user.TokenVersion), now);
 
         return new RefreshResult(accessToken, newToken, session.ExpiresAt);
+    }
+
+    // A refresh token that was already used came back: someone holds a copy. The session is already ended; tell the security page.
+    private async Task RaiseReuseAsync(Session session, string? ip, CancellationToken ct)
+    {
+        var raised = SecurityEvent.Create(session.TenantId, clock.UtcNow, Severity.High, "refresh.reuse", userId: session.UserId, ip: ip);
+        if (raised.IsSuccess) await securityEvents.WriteAsync(raised.Value, ct);
+        else logger.LogError("Could not build security event refresh.reuse: {Code}", raised.Error.Code);
     }
 }

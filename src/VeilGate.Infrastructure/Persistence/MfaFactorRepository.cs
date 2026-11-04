@@ -11,6 +11,11 @@ public sealed class MfaFactorRepository(VeilGateDbContext db) : IMfaFactorReposi
     public Task<MfaFactor?> GetTotpForUserAsync(Guid userId, CancellationToken ct) =>
         db.MfaFactors.FirstOrDefaultAsync(f => f.UserId == userId && f.Type == MfaFactorType.Totp, ct);
 
+    // One statement: "move the newest used window forward, but only if it is still behind this one".
+    public async Task<bool> TryRecordUseAsync(MfaFactor factor, long counter, DateTimeOffset now, CancellationToken ct) =>
+        await db.MfaFactors.Where(f => f.Id == factor.Id && f.IsConfirmed && f.LastUsedCounter < counter)
+            .ExecuteUpdateAsync(s => s.SetProperty(f => f.LastUsedCounter, counter).SetProperty(f => f.UpdatedAt, now), ct) == 1;
+
     public void Add(MfaFactor factor) => db.MfaFactors.Add(factor);
 
     public void Remove(MfaFactor factor) => db.MfaFactors.Remove(factor);

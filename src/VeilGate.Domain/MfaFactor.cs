@@ -9,6 +9,8 @@ public sealed class MfaFactor : TenantEntity
 {
     private MfaFactor() { }
 
+    public static readonly Error CodeReused = Error.Unauthorized("mfa.code_reused", "This code was already used.");
+
     public Guid UserId { get; private set; }
     public MfaFactorType Type { get; private set; }
 
@@ -60,7 +62,7 @@ public sealed class MfaFactor : TenantEntity
             return Result.Failure(Error.Forbidden("mfa.not_confirmed", "This factor has not been confirmed."));
 
         if (counter <= LastUsedCounter)
-            return Result.Failure(Error.Unauthorized("mfa.code_reused", "This code was already used."));
+            return Result.Failure(CodeReused);
 
         LastUsedCounter = counter;
         UpdatedAt = now;

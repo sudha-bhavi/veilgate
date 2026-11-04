@@ -601,12 +601,14 @@ Some safety rules are checked by the test suite on every run (and so by CI), so 
   (`Llm:AllowPrivateNetworks`), the access token lives longer than 15 minutes, or the sign-in limit is above 30 a minute (so it
   cannot be left raised after a penetration test). The messages name the setting and the reason, never its value. Missing signing
   keys were already refused outside Development.
-- **Not done yet:** the penetration test itself (the plan is Document 06; nothing here claims it has been run) and a secret scanner in CI.
+- **Not done yet:** finishing the penetration test (the plan is Document 06; it has been started, see `docs/pentest/results.md`) and a secret scanner in CI.
 
 ### M7: penetration test tooling
 
-`docs/pentest/` and `tools/pentest/` make the penetration test plan (Document 06) runnable. **The test has not been run**: the result
-sheet and the findings log are empty on purpose, and nothing here claims the system has been pen tested.
+`docs/pentest/` and `tools/pentest/` make the penetration test plan (Document 06) runnable. **The test has been started, not finished**:
+`docs/pentest/results.md` lists exactly which scenarios were run and what happened (including runs that told us nothing), and nothing here
+claims the system has been fully pen tested. The first run already found a real flaw: a one-time recovery code could be used by two
+requests at the same instant (finding VG-PT-001, fixed with an atomic database update and a test that races 20 requests against a real database).
 
 - **A runbook** (`docs/pentest/README.md`): rules (your own system only, synthetic data only), setup in about 15 minutes, a day-by-day
   order, how to record results, and where this build differs from the plan (for example, no CSRF token: the refresh cookie relies on
@@ -635,7 +637,7 @@ sheet and the findings log are empty on purpose, and nothing here claims the sys
 ### M7: the production stack
 
 `deploy/docker-compose.prod.yml` describes a production-shaped deployment on one machine. **Nothing here has been put on a server**, and
-the penetration test has not been run: do that before exposing it to the internet.
+the penetration test is only partly run (see `docs/pentest/results.md`): finish it before exposing this to the internet.
 
 - **Reachable from outside: Caddy on ports 80 and 443, and nothing else.** Caddy gets and renews a Let's Encrypt certificate by itself,
   keeps `/health` away from the internet, refuses bodies over 6 MB, and replaces any `X-Forwarded-For` a client sends. PostgreSQL and
@@ -672,7 +674,7 @@ watch every day, the operations calendar from Document 08, a troubleshooting tab
   operators run it at once, so it cannot be used later to add an administrator by the back door. `--reissue` makes a new link if the first was
   lost, but only while that one administrator has still not signed up. The organisation's audit log starts with a `tenant.bootstrap` event.
 - **Known gaps, written down in the runbook:** no demo data in a production-shaped stack (the seeder is development-only), no platform admin to
-  create further organisations, no monitoring or alerting stack, and no high availability. The penetration test has not been run.
+  create further organisations, no monitoring or alerting stack, and no high availability. The penetration test is only partly run.
 
 ### Decisions
 

@@ -79,6 +79,14 @@ public sealed class User : TenantEntity
         UpdatedAt = now;
     }
 
+    /// <summary>A correct code at step-up: the attempts counted before it are forgiven, as at sign-in (but this is not a new sign-in).</summary>
+    public void ClearFailedAttempts(DateTimeOffset now)
+    {
+        FailedAttempts = 0;
+        LockedUntil = null;
+        UpdatedAt = now;
+    }
+
     public void RegisterSuccessfulLogin(DateTimeOffset now)
     {
         FailedAttempts = 0;

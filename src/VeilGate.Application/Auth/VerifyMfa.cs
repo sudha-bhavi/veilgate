@@ -55,12 +55,19 @@ public sealed class VerifyMfaHandler(
         if (factor is not { IsConfirmed: true })
             return Error.Forbidden("mfa.not_enrolled", "Set up MFA first.");
 
+        // Count this attempt first, atomically; only then check the code (see TryReserveLoginAttemptAsync).
+        if (!await users.TryReserveLoginAttemptAsync(user, now, ct))
+        {
+            await auditor.DeniedAsync(user, AuthAuditor.SignIn, cmd.Ip, ct);
+            return LoginHandler.AccountLocked;
+        }
+
         string[] methods;
         if (RecoveryCodes.Normalize(cmd.Code).Length == RecoveryCodeLength)
         {
             // A backup code. Look it up by its hash; it must exist and must not have been used before.
             var stored = await recoveryCodeStore.FindByHashAsync(user.Id, RecoveryCodes.Hash(cmd.Code), ct);
-            if (stored is null || stored.MarkUsed(now).IsFailure)
+            if (stored is null || !await recoveryCodeStore.TrySpendAsync(stored, now, ct))   // atomic: two requests cannot both spend it
                 return await RejectAsync(user, now, "recovery_code", cmd.Ip, ct);
 
             methods = ["pwd", "recovery"];
@@ -72,8 +79,8 @@ public sealed class VerifyMfaHandler(
             var window = Totp.Verify(secret, cmd.Code, now.ToUnixTimeSeconds(), factor.LastUsedCounter);
             if (window is null) return await RejectAsync(user, now, "code", cmd.Ip, ct);
 
-            var used = factor.RecordUse(window.Value, now);   // remember the window so this code can't be replayed
-            if (used.IsFailure) return used.Error;
+            // Remember the window so this code can't be replayed. Atomic: two requests with the same code cannot both pass.
+            if (!await factors.TryRecordUseAsync(factor, window.Value, now, ct)) return MfaFactor.CodeReused;
 
             methods = ["pwd", "otp"];
         }
@@ -102,8 +109,6 @@ public sealed class VerifyMfaHandler(
     // A wrong code counts like a wrong password: 5 in a row lock the account for 15 minutes.
     private async Task<Result<VerifyMfaResult>> RejectAsync(User user, DateTimeOffset now, string reason, string? ip, CancellationToken ct)
     {
-        user.RegisterFailedLogin(now);
-        await users.SaveChangesAsync(ct);
         await auditor.FailedAsync(user, AuthAuditor.SignIn, reason, ip, ct);
         return ConfirmTotpHandler.InvalidCode;
     }

@@ -30,6 +30,15 @@ public class VerifyMfaHandlerTests
     {
         _clock.UtcNow.Returns(Now);
         _users.IsTenantActiveAsync(Arg.Any<CancellationToken>()).Returns(true);
+        _users.CountAttemptsInMemory();
+
+        // A mock replaces EVERY method of its interface, including the two "atomic" ones, which would then just answer false.
+        // Tell them to behave like the real repositories, here in memory: a window or a recovery code works the first time and
+        // is refused afterwards. (The real database versions are tested against PostgreSQL in AtomicOneTimeUseTests.)
+        _factors.TryRecordUseAsync(Arg.Any<MfaFactor>(), Arg.Any<long>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(call.Arg<MfaFactor>().RecordUse(call.ArgAt<long>(1), call.ArgAt<DateTimeOffset>(2)).IsSuccess));
+        _recovery.TrySpendAsync(Arg.Any<RecoveryCode>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(call.Arg<RecoveryCode>().MarkUsed(call.ArgAt<DateTimeOffset>(1)).IsSuccess));
         _tokens.IssueAccessToken(Arg.Do<AccessTokenClaims>(c => _issued = c), Arg.Any<DateTimeOffset?>())
                .Returns("access-token");
     }

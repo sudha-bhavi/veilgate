@@ -12,6 +12,11 @@ public sealed class RecoveryCodeRepository(VeilGateDbContext db) : IRecoveryCode
     public Task<RecoveryCode?> FindByHashAsync(Guid userId, string codeHash, CancellationToken ct) =>
         db.RecoveryCodes.FirstOrDefaultAsync(c => c.UserId == userId && c.CodeHash == codeHash, ct);
 
+    // One statement: "mark it used, but only if it is still unused". The database decides who wins, and exactly one caller sees 1 row changed.
+    public async Task<bool> TrySpendAsync(RecoveryCode code, DateTimeOffset now, CancellationToken ct) =>
+        await db.RecoveryCodes.Where(c => c.Id == code.Id && c.UsedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.UsedAt, now), ct) == 1;
+
     public Task<int> CountUnusedAsync(Guid userId, CancellationToken ct) =>
         db.RecoveryCodes.CountAsync(c => c.UserId == userId && c.UsedAt == null, ct);
 
