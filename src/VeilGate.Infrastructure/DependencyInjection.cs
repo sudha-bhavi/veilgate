@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<IOutbox, EfOutbox>();
         services.AddScoped<IGatewayRequestReader, GatewayRequestReader>();
         services.AddScoped<IDashboardReader, DashboardReader>();
+        services.AddScoped<IHousekeepingStore, Housekeeping.PostgresHousekeepingStore>();
         services.AddScoped<IOutboxStore, Messaging.PostgresOutboxStore>();
         services.AddSingleton<IGatewayEventProjector, Messaging.GatewayEventProjector>();
         services.AddScoped<ISecurityEventWriter, SecurityEventWriter>();

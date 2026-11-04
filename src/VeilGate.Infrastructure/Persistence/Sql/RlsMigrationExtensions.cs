@@ -260,6 +260,47 @@ public static class RlsMigrationExtensions
         GRANT EXECUTE ON FUNCTION outbox_mark_dead(uuid, varchar) TO vg_app;
         """);
 
+    /// <summary>
+    /// The housekeeping workers clean up across every tenant and have none set, so they use two narrow SECURITY DEFINER doors that
+    /// only delete what is already finished. A vault session that has expired is removed (its tokens go with it through the cascade).
+    /// A login session is removed once it ended (revoked, past its hard limit, or idle for too long) longer ago than the grace
+    /// period. The grace period keeps a just-ended session around, so a replayed old refresh token is still recognised as reuse.
+    /// </summary>
+    public static void CreateHousekeepingFunctions(this MigrationBuilder mb) => mb.Sql("""
+        DROP FUNCTION IF EXISTS vault_purge_expired();
+        CREATE FUNCTION vault_purge_expired()
+        RETURNS int
+        LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+            WITH gone AS (DELETE FROM vault_sessions WHERE expires_at <= now() RETURNING 1)
+            SELECT count(*)::int FROM gone
+        $$;
+
+        DROP FUNCTION IF EXISTS sessions_reap(int, int);
+        CREATE FUNCTION sessions_reap(p_idle_seconds int, p_grace_seconds int)
+        RETURNS int
+        LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp
+        AS $$
+            WITH gone AS (
+                DELETE FROM sessions s
+                WHERE LEAST(coalesce(s.revoked_at, 'infinity'::timestamptz), s.expires_at,
+                            s.last_seen_at + make_interval(secs => p_idle_seconds))
+                      < now() - make_interval(secs => p_grace_seconds)
+                RETURNING 1)
+            SELECT count(*)::int FROM gone
+        $$;
+
+        REVOKE ALL ON FUNCTION vault_purge_expired() FROM PUBLIC;
+        REVOKE ALL ON FUNCTION sessions_reap(int, int) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION vault_purge_expired() TO vg_app;
+        GRANT EXECUTE ON FUNCTION sessions_reap(int, int) TO vg_app;
+        """);
+
+    public static void DropHousekeepingFunctions(this MigrationBuilder mb) => mb.Sql("""
+        DROP FUNCTION IF EXISTS vault_purge_expired();
+        DROP FUNCTION IF EXISTS sessions_reap(int, int);
+        """);
+
     public static void DropOutboxFunctions(this MigrationBuilder mb) => mb.Sql("""
         DROP FUNCTION IF EXISTS outbox_claim_due(int, int);
         DROP FUNCTION IF EXISTS outbox_mark_sent(uuid);

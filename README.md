@@ -66,10 +66,10 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 | M4        | Policy workflow, API clients, LLM providers, evaluations, step-up check                             | ✅ Done |
 | M5        | React console: sign-in, playground, policies, API clients, providers, evaluations, audit log, users | ✅ Done |
 | M5+       | Security page, read-only demo, invitations                                                          | ✅ Done |
-| M6        | Kafka outbox, workers, dashboards                                                                   | 🚧 In progress |
+| M6        | Kafka outbox, workers, dashboards                                                                   | ✅ Done |
 | M7        | Hardening, pen test, deployment                                                                     |         |
 
-In the console, Dashboard, Requests and Settings are marked "Not built yet": their server side is not written.
+In the console, Settings is marked "Not built yet": its server side is not written.
 Everything else works end to end, including the Security page (sessions, two-step sign-in, password and security
 events). Passkeys are not built yet.
 
@@ -421,7 +421,7 @@ POST  /api/v1/users/accept-invite          choose a name and password           
 dotnet ef database update --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api
 ```
 
-### M6: the outbox (in progress)
+### M6: the outbox
 
 Gateway events will travel through Kafka (Redpanda locally) to a worker that fills the Dashboard and Requests pages. The first
 step is the outbox: a table that holds each message until a worker has sent it.
@@ -522,6 +522,19 @@ GET /api/v1/dashboard/timeseries?range=24h|7d|30d&metric=requests|entities|laten
 - **Latency is "up to".** Counters hold counts per latency band, so p50 and p95 are the upper limit of the band that holds them
   (for example "up to 250 ms"), not an exact time.
 
+### M6: housekeeping workers
+
+Two small workers in `VeilGate.Workers` remove finished data across every tenant, through narrow database functions (the same
+kind of door the outbox publisher uses, because these workers have no tenant):
+
+- **Vault purger** (every 60 seconds): deletes vault sessions whose time is up. Their tokens go with them through the cascade, so
+  protected values never outlive the session they belong to.
+- **Session reaper** (every 5 minutes): deletes login sessions that ended more than 24 hours ago. A session ends when it is revoked,
+  passes its 7-day hard limit, or sits idle for 8 hours. The 24-hour grace period keeps an ended session long enough for a replayed
+  old refresh token to still be recognised as reuse.
+- **Settings** under `Housekeeping`: `VaultPurgeSeconds`, `SessionReapSeconds`, `SessionGraceHours`.
+- **After pulling this,** apply the migration (`AddHousekeepingFunctions`) and restart the worker.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
@@ -539,6 +552,8 @@ Where this project departs from the design documents (which were drafted with AI
   a status column the documents do not have.
 - **Order on retry.** Messages with the same key are published in creation order, but a retried message can arrive after a later
   one. The metrics consumer does not depend on order.
+- **Session grace period.** The documents say the reaper "removes expired refresh tokens and sessions". Here an ended session is kept for
+  24 hours first, so reuse of a just-expired refresh token is still detected. It is a setting.
 - **No security events on the Dashboard.** The documents list `recentSecurityEvents` in the summary. Security events are filtered by role and
   already have their own page, so the Dashboard links to it instead of repeating them.
 - **Requests route and visibility.** The documents name the controller `gateway-requests` and apply an ownership filter for Developers
