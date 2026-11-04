@@ -490,6 +490,22 @@ Dashboard) and `processed_messages`.
   the upper limit of a band, not an exact time.
 - **Swappable.** The worker talks to `IEventConsumer`; Kafka is one implementation. With `Messaging:Transport` set to `InMemory` it reads nothing.
 
+### M6: the Requests page
+
+```
+GET /api/v1/requests            list, newest first; filters: from, to, action, status, clientId, requestId; page, pageSize
+GET /api/v1/requests/{id}       one request
+GET /api/v1/requests/actions    the actions that occur, for a filter list
+```
+
+- **Who can see it.** Every person of the tenant (Tenant Admin, Security Officer, Developer, Auditor). API client tokens cannot.
+  Another tenant's requests are never visible: row-level security limits every query.
+- **What a row holds.** Time, who sent it, action, result, how many values of each entity type were protected, latency, and for chat
+  the model, provider and policy version, plus the reason a call was denied or failed. Never the text.
+- **A moment after the call.** Rows are written by the metrics consumer, so a call appears once its event has travelled through Kafka.
+- **In the console.** Requests lists the calls with filters (kept in the address bar, so a view can be bookmarked) and a pager; each
+  row opens its own page.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
@@ -507,6 +523,9 @@ Where this project departs from the design documents (which were drafted with AI
   a status column the documents do not have.
 - **Order on retry.** Messages with the same key are published in creation order, but a retried message can arrive after a later
   one. The metrics consumer does not depend on order.
+- **Requests route and visibility.** The documents name the controller `gateway-requests` and apply an ownership filter for Developers
+  elsewhere. Here the route is `/api/v1/requests`, and every tenant role sees all of the tenant's requests, because a row holds only
+  counts and names.
 - **Latency as bands.** The documents have `p50_ms` and `p95_ms` columns in `metrics_hourly`. A percentile cannot be updated by
   adding one call, so counts per latency band are stored instead and the percentiles are worked out when read.
 - **`gateway_requests` is not partitioned yet,** and is keyed by the message id (request ids are short and can repeat). It has a
