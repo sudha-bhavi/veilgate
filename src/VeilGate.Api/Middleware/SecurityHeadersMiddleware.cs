@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Options;
+using VeilGate.Api.Options;
+
 namespace VeilGate.Api.Middleware;
 
 /// <summary>
@@ -5,9 +8,12 @@ namespace VeilGate.Api.Middleware;
 /// The console is served from the same origin (the refresh cookie is SameSite=Strict, so it must be), and its pages get a
 /// policy that allows only our own files.
 /// </summary>
-public sealed class SecurityHeadersMiddleware(RequestDelegate next)
+public sealed class SecurityHeadersMiddleware(RequestDelegate next, IOptions<SecurityHeadersOptions> options)
 {
     public const string ApiPolicy = "default-src 'none'; frame-ancestors 'none'";
+
+    /// <summary>Switches off browser features the console never uses, so a script that got in could not turn them on.</summary>
+    public const string PermissionsPolicy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()";
 
     public static readonly string ConsolePolicy = string.Join("; ",
         "default-src 'self'",
@@ -37,6 +43,9 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next)
             h["X-Frame-Options"] = "DENY";
             h["Referrer-Policy"] = "strict-origin-when-cross-origin";
             h["Cross-Origin-Opener-Policy"] = "same-origin";
+            h["Cross-Origin-Resource-Policy"] = "same-origin";   // other sites may not embed our responses
+            h["Permissions-Policy"] = PermissionsPolicy;
+            if (options.Value.Hsts) h["Strict-Transport-Security"] = $"max-age={Math.Max(options.Value.HstsMaxAgeDays, 1) * 86400}; includeSubDomains";
 
             if (IsApiPath(path))
             {
