@@ -16,11 +16,13 @@ public static class MessagingServiceCollectionExtensions
         {
             services.AddSingleton<InMemoryEventTransport>();
             services.AddSingleton<IEventTransport>(sp => sp.GetRequiredService<InMemoryEventTransport>());
+            services.AddSingleton<IEventConsumer, IdleEventConsumer>();
             return services;
         }
 
         services.AddOptions<KafkaOptions>().BindConfiguration(KafkaOptions.Section);
         services.AddSingleton<IEventTransport, KafkaEventTransport>();
+        services.AddSingleton<IEventConsumer, KafkaEventConsumer>();
         return services;
     }
 }
