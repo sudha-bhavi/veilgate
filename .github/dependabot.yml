@@ -1,0 +1,27 @@
+# Weekly pull requests that update dependencies, so security fixes do not wait for someone to remember (Deployment doc 6.6).
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directories:
+      - "/src/*"
+      - "/tests/*"
+      - "/tools/*"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: "/src/VeilGate.Web"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/deploy"
+    schedule:
+      interval: weekly

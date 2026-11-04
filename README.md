@@ -1,5 +1,7 @@
 # VeilGate
 
+[![CI](https://github.com/sudha-bhavi/veilgate/actions/workflows/ci.yml/badge.svg)](https://github.com/sudha-bhavi/veilgate/actions/workflows/ci.yml)
+
 A multi-tenant gateway that finds protected health information (PHI) in text, replaces it according to a policy,
 sends only the sanitized text to an LLM, and restores the values in the answer.
 
@@ -42,8 +44,30 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
   else sees only events about their own account.
 - **A read-only demo.** An optional "Try the demo" button on the sign-in page lets a visitor look around with sample
   data, without an account. It is off by default and cannot change anything (see "Try the demo" below).
-- **A React console** for all of it: playground, policies with a YAML editor, API clients, providers, evaluations,
-  the audit log and users.
+- **An event pipeline.** Every gateway call is announced through a transactional outbox to Kafka (Redpanda locally), with retries,
+  a dead-letter topic and an idempotent consumer that builds the Requests page and the Dashboard counters. See "M6" below.
+- **A React console** for all of it: dashboard, playground, policies with a YAML editor, API clients, providers, evaluations,
+  requests, the audit log and users.
+
+## Screenshots
+
+All data shown is synthetic.
+
+![The Dashboard: requests, protected items, blocked calls, latency, a chart over time, what was protected and the busiest callers](docs/screenshots/dashboard.png)
+
+![The Requests page: each gateway call with who sent it, the result, how many items were protected and how long it took](docs/screenshots/requests.png)
+
+More of the console:
+
+![The Playground: text with a phone number, what the detectors found, and the masked text that leaves VeilGate](docs/screenshots/playground.png)
+
+![Policies: one published, one waiting for approval, and drafts](docs/screenshots/policies.png)
+
+![Evaluations: a policy measured against synthetic notes with known answers, here a run that missed its recall target](docs/screenshots/evaluations.png)
+
+![The audit log: who did what and when, with a button to check the hash chain for tampering](docs/screenshots/audit-log.png)
+
+![Security: the places a person is signed in, with tabs for MFA, password and security events](docs/screenshots/security.png)
 
 ## Tech stack
 
@@ -67,7 +91,7 @@ Design documents (PRS, UI, Backend, Database, Security, Pen test plan, Test case
 | M5        | React console: sign-in, playground, policies, API clients, providers, evaluations, audit log, users | ✅ Done |
 | M5+       | Security page, read-only demo, invitations                                                          | ✅ Done |
 | M6        | Kafka outbox, workers, dashboards                                                                   | ✅ Done |
-| M7        | Hardening, pen test, deployment                                                                     |         |
+| M7        | Hardening, pen test, deployment                                                                     | 🚧 In progress |
 
 In the console, Settings is marked "Not built yet": its server side is not written.
 Everything else works end to end, including the Security page (sessions, two-step sign-in, password and security
@@ -534,6 +558,20 @@ kind of door the outbox publisher uses, because these workers have no tenant):
   old refresh token to still be recognised as reuse.
 - **Settings** under `Housekeeping`: `VaultPurgeSeconds`, `SessionReapSeconds`, `SessionGraceHours`.
 - **After pulling this,** apply the migration (`AddHousekeepingFunctions`) and restart the worker.
+
+### M7: continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`. It needs no secrets and deploys nothing.
+
+- **Backend:** restore, build (Release) and the whole test suite. The database tests start a throwaway PostgreSQL in Docker, which the
+  GitHub runner provides. The .NET version comes from `global.json`.
+- **Console:** `npm ci`, lint, build (which also type-checks) and the Vitest tests, on Node 22.
+- **API image:** `docker build` of `deploy/Dockerfile.api`, to prove the image still builds. It is not pushed anywhere.
+- **Dependency audit:** NuGet and npm packages are checked against known vulnerabilities. It reports without failing the run for now;
+  remove `continue-on-error` in the workflow once it is clean to make it a gate.
+- **Dependabot** (`.github/dependabot.yml`) opens weekly pull requests for NuGet, npm, GitHub Actions and Docker updates.
+- **Not done yet:** pinning third-party actions to a commit SHA (only GitHub's own `actions/*` are used so far), a secret scanner,
+  and the staging and production deploy workflows from the Deployment document.
 
 ### Decisions
 
