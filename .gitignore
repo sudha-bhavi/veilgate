@@ -8,3 +8,4 @@ obj/
 node_modules/
 dist/
 TestResults/
+.DS_Store

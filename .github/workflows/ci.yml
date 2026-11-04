@@ -1,0 +1,113 @@
+name: CI
+
+# Runs on every pull request and on every push to main. Nothing here deploys or uses a secret.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# The least a workflow needs: it only reads the repository.
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # The SDK version comes from global.json, so CI builds with the same one as your machine.
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      # The database tests start a throwaway PostgreSQL in Docker, which the runner provides.
+      - name: Test
+        run: dotnet test --no-build -c Release
+
+  frontend:
+    name: Console lint, build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/VeilGate.Web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/VeilGate.Web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # "build" also type-checks the whole console (tsc -b).
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  api-image:
+    name: API container builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Built, not pushed anywhere: this only proves the image still builds.
+      - name: Build the image
+        run: docker build -f deploy/Dockerfile.api -t veilgate-api:ci .
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Reports without failing the run, so a newly published advisory does not block unrelated work.
+    # Once the audit is clean, delete this line to make it a gate.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: NuGet packages with known vulnerabilities
+        run: |
+          status=0
+          for project in $(git ls-files '*.csproj'); do
+            dotnet list "$project" package --vulnerable --include-transitive | tee -a nuget-audit.txt
+          done
+          if grep -q "has the following vulnerable packages" nuget-audit.txt; then
+            echo "::warning::Vulnerable NuGet packages found, see the log above"
+            status=1
+          fi
+          exit $status
+
+      - name: npm packages with known vulnerabilities
+        working-directory: src/VeilGate.Web
+        run: npm audit --audit-level=high
