@@ -230,6 +230,20 @@ public class ProductionSafetyCheckTests
         ProblemsWith(v => v["Llm:AllowPrivateNetworks"] = "true").Should().ContainSingle().Which.Should().Contain("SSRF");
     }
 
+    [Theory]
+    [InlineData("0.0.0.0/0")]
+    [InlineData("::/0")]
+    public void Trusting_every_address_as_a_proxy_is_refused(string network)
+    {
+        ProblemsWith(v => v["Proxy:TrustedNetworks:0"] = network).Should().ContainSingle().Which.Should().Contain("Proxy:TrustedNetworks");
+    }
+
+    [Fact]
+    public void Trusting_only_the_proxys_own_network_is_fine()
+    {
+        ProblemsWith(v => v["Proxy:TrustedNetworks:0"] = "172.16.0.0/12").Should().BeEmpty();
+    }
+
     [Fact]
     public void A_long_lived_access_token_is_refused()
     {
