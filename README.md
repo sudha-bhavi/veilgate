@@ -611,9 +611,9 @@ Some safety rules are checked by the test suite on every run (and so by CI), so 
 
 **Done and tested:** CI (build, tests, dependency audit, secret scan), the production safety check, proxy support, images, the production
 compose stack, backup and restore-drill scripts, the operations runbook, the first-administrator command, the read-only Settings page,
-and five penetration-test findings found, fixed with tests, and retested except where noted (one-time codes, refresh rotation, account
-lockout under parallel guesses, a server error on a NUL character in a filter; the `refresh.reuse` security event is fixed and tested in
-code but its appearance on the Security page has not been checked by hand). One more is logged as an accepted Info observation.
+and five penetration-test findings found, fixed with tests, and retested (one-time codes, refresh rotation, account lockout under
+parallel guesses, a server error on a NUL character in a filter, and the missing `refresh.reuse` security event, now seen on the Security
+page). One more is logged as an accepted Info observation.
 
 **Not done, on purpose or for lack of a deployment** (nothing is deployed; hosting costs money this project does not have):
 - **The penetration test is partly run.** Done: authentication races and lockout, role-by-role authorization with damaged tokens, ten

@@ -161,13 +161,13 @@ Daily, a few minutes (Document 08, section 6.6). All commands use the compose pr
 - **No monitoring or alerting stack.** The "What to watch" list is manual. Document 08 section 6.1 describes alerts (availability, error
   rate, latency, sign-in failures); none of those are wired up.
 - **One machine, no failover**, and rate limits are per process.
-- **The penetration test is only partly run** (see `docs/pentest/results.md`; the runs so far found five flaws, all fixed in code and retested except the Security page check of one event), and no external security review has been done.
+- **The penetration test is only partly run** (see `docs/pentest/results.md`; the runs so far found five flaws, all fixed in code and retested), and no external security review has been done.
 
 ## Go-live checklist (Document 08, section 6.5) and where this stands
 
 | Item | State |
 |---|---|
-| Penetration test plan executed, no open Critical or High findings | **Not done**: started; 5 flaws found (one High) and all fixed; no open Critical or High finding, but the 62 scenarios are not all run (tenant isolation needs a run with data, and many scenarios are not scripted) |
+| Penetration test plan executed, no open Critical or High findings | **Not done**: started; 5 flaws found (one High), all fixed and retested; no open Critical or High finding, but the 62 scenarios are not all run (tenant isolation needs a run with data, and many scenarios are not scripted) |
 | ZAP baseline and image scans clean | Not done (dependency audit runs in CI; no ZAP) |
 | MFA enforced for all users; seed accounts removed; bootstrap invitation used | MFA is required at first sign-in; the production stack has no seed accounts; the bootstrap link is single-use and expires in 48 hours. **You must confirm it was used.** |
 | WAF in prevention mode; rate limits; health endpoints internal only | Rate limits and internal-only health: done. WAF: none |
