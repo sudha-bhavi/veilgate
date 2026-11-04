@@ -221,3 +221,19 @@ jobs:
       - name: npm packages with known vulnerabilities
         working-directory: src/VeilGate.Web
         run: npm audit --audit-level=high
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The whole history, not just the latest commit: a secret that was committed and then deleted is still public.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The free scanner image, run directly (no account or licence key needed). It fails the job if it finds anything.
+      - name: Scan the repository history
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 \
+            detect --source /repo --config /repo/.gitleaks.toml --redact --verbose
