@@ -21,4 +21,14 @@ internal static class PostgresConverters
         (x, y) => x!.Count == y!.Count && !x.Except(y).Any(),
         v => v.Aggregate(0, (h, kv) => HashCode.Combine(h, kv.Key, kv.Value)),
         v => new Dictionary<string, string>(v));
+
+    /// <summary>A small name-to-count dictionary (entities per type, calls per latency band) is a dictionary in our code and jsonb in the database.</summary>
+    public static readonly ValueConverter<IReadOnlyDictionary<string, int>, string> Counts = new(
+        v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+        v => JsonSerializer.Deserialize<Dictionary<string, int>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, int>());
+
+    public static readonly ValueComparer<IReadOnlyDictionary<string, int>> CountsComparer = new(
+        (x, y) => x!.Count == y!.Count && !x.Except(y).Any(),
+        v => v.Aggregate(0, (h, kv) => HashCode.Combine(h, kv.Key, kv.Value)),
+        v => new Dictionary<string, int>(v));
 }

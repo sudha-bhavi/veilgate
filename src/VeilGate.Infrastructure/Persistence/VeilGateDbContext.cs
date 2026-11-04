@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using VeilGate.Domain.Evaluation;
 using VeilGate.Domain.Messaging;
+using VeilGate.Domain.Metrics;
 
 namespace VeilGate.Infrastructure.Persistence;
 
@@ -39,6 +40,9 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
     public DbSet<EvalLeak> EvalRunLeaks => Set<EvalLeak>();
         public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<GatewayRequestRecord> GatewayRequests => Set<GatewayRequestRecord>();
+    public DbSet<MetricsHour> MetricsHourly => Set<MetricsHour>();
+    public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.HasPostgresExtension("citext");
@@ -594,6 +598,75 @@ public sealed class VeilGateDbContext(DbContextOptions<VeilGateDbContext> option
                 t.HasCheckConstraint("ck_outbox_topic", "topic in ('vg.gateway.requests.v1')");
                 t.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
             });
+        });
+
+        b.Entity<GatewayRequestRecord>(e =>
+        {
+            e.ToTable("gateway_requests");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.ClientId).HasColumnName("client_id");   // a client or a user (see actor_type), so no foreign key
+            e.Property(x => x.ActorType).HasColumnName("actor_type").HasMaxLength(10).IsRequired();
+            e.Property(x => x.RequestId).HasColumnName("request_id").HasMaxLength(40).IsRequired();
+            e.Property(x => x.Action).HasColumnName("action").HasMaxLength(30).IsRequired();
+            e.Property(x => x.Status).HasColumnName("status").HasMaxLength(10).IsRequired();
+            e.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(200);
+            e.Property(x => x.Model).HasColumnName("model").HasMaxLength(200);
+            e.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(200);
+            e.Property(x => x.PolicyVersion).HasColumnName("policy_version").HasMaxLength(200);
+            e.Property(x => x.EntityCount).HasColumnName("entity_count");
+            e.Property(x => x.Entities).HasColumnName("entities").HasColumnType("jsonb").IsRequired()
+                .HasConversion(PostgresConverters.Counts, PostgresConverters.CountsComparer);
+            e.Property(x => x.LatencyMs).HasColumnName("latency_ms");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            // The request list: newest first, then the same filtered by client, and the error and blocked view.
+            e.HasIndex(x => new { x.TenantId, x.CreatedAt }).IsDescending(false, true).HasDatabaseName("ix_gateway_requests_time");
+            e.HasIndex(x => new { x.TenantId, x.ClientId, x.CreatedAt }).IsDescending(false, false, true).HasDatabaseName("ix_gateway_requests_client");
+            e.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAt }).IsDescending(false, false, true)
+                .HasDatabaseName("ix_gateway_requests_problems").HasFilter("status <> 'success'");
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_gateway_requests_status", "status in ('success','failure','denied')");
+                t.HasCheckConstraint("ck_gateway_requests_actor", "actor_type in ('user','client')");
+                t.HasCheckConstraint("ck_gateway_requests_entities", "entity_count >= 0");
+            });
+        });
+
+        b.Entity<MetricsHour>(e =>
+        {
+            e.ToTable("metrics_hourly");
+            e.HasKey(x => new { x.TenantId, x.Hour, x.ClientId });
+            e.Property(x => x.TenantId).HasColumnName("tenant_id");
+            e.Property(x => x.Hour).HasColumnName("hour");
+            e.Property(x => x.ClientId).HasColumnName("client_id");
+            e.Property(x => x.Requests).HasColumnName("requests");
+            e.Property(x => x.Blocked).HasColumnName("blocked");
+            e.Property(x => x.Failed).HasColumnName("failed");
+            e.Property(x => x.Entities).HasColumnName("entities");
+            e.Property(x => x.EntitiesByType).HasColumnName("entities_by_type").HasColumnType("jsonb").IsRequired()
+                .HasConversion(PostgresConverters.Counts, PostgresConverters.CountsComparer);
+            e.Property(x => x.LatencyBuckets).HasColumnName("latency_buckets").HasColumnType("jsonb").IsRequired()
+                .HasConversion(PostgresConverters.Counts, PostgresConverters.CountsComparer);
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.ToTable(t => t.HasCheckConstraint("ck_metrics_hourly_counts", "requests >= 0 and blocked >= 0 and failed >= 0 and entities >= 0"));
+        });
+
+        b.Entity<ProcessedMessage>(e =>
+        {
+            e.ToTable("processed_messages");
+            e.HasKey(x => new { x.Consumer, x.MessageId });
+            e.Property(x => x.Consumer).HasColumnName("consumer").HasMaxLength(60);
+            e.Property(x => x.MessageId).HasColumnName("message_id");
+            e.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+            e.Property(x => x.ProcessedAt).HasColumnName("processed_at");
+
+            e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            // Old rows are purged by age later.
+            e.HasIndex(x => x.ProcessedAt).HasDatabaseName("ix_processed_messages_age");
         });
     }
 }
