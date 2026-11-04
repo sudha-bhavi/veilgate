@@ -2,6 +2,7 @@ using Serilog;
 using VeilGate.Application;
 using VeilGate.Infrastructure;
 using VeilGate.Infrastructure.Evaluation;
+using VeilGate.Infrastructure.Housekeeping;
 using VeilGate.Infrastructure.Messaging;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -18,7 +19,10 @@ builder.Services.AddHostedService<EvaluationWorker>();
 builder.Services.AddHostedService<OutboxPublisherWorker>();
 builder.Services.AddSingleton<GatewayEventConsumerHandler>();
 builder.Services.AddHostedService<MetricsAggregatorWorker>();
-// Vault purger and session reaper are added in a later milestone step (Backend doc 6.6).
+builder.Services.Configure<HousekeepingOptions>(builder.Configuration.GetSection(HousekeepingOptions.Section));
+builder.Services.AddSingleton<HousekeepingJobs>();
+builder.Services.AddHostedService<VaultPurgerWorker>();
+builder.Services.AddHostedService<SessionReaperWorker>();
 builder.Build().Run();
 
 public sealed class HeartbeatWorker(ILogger<HeartbeatWorker> log) : BackgroundService
