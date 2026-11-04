@@ -593,8 +593,15 @@ Some safety rules are checked by the test suite on every run (and so by CI), so 
   and hard to undo once a browser has remembered it.
 - Already covered by earlier work: exact-origin CORS (a wildcard is refused at startup), per-IP login limits and per-client gateway
   limits, refusal of unknown JSON fields, and the request-size limits.
-- **Not done yet:** the penetration test itself (the plan is Document 06; nothing here claims it has been run), a secret scanner in CI,
-  and a startup check that refuses dangerous settings in production.
+- **A production safety check at startup.** Outside Development the API refuses to start, and lists every problem at once, if any of
+  these is wrong: the demo is on (unless `Safety__AllowDemo=true` for a sandbox), the database login is not `vg_app` or its password is
+  short or a placeholder, the vault key or MFA encryption key is missing, malformed, not random, the same as the other, or is the
+  development key published in this repository, a CORS origin or `Console:BaseUrl` is not a public https address, the mail server is
+  missing, local, or without STARTTLS, HSTS is off, `AllowedHosts` is `*`, the outbound-network protection is relaxed
+  (`Llm:AllowPrivateNetworks`), the access token lives longer than 15 minutes, or the sign-in limit is above 30 a minute (so it
+  cannot be left raised after a penetration test). The messages name the setting and the reason, never its value. Missing signing
+  keys were already refused outside Development.
+- **Not done yet:** the penetration test itself (the plan is Document 06; nothing here claims it has been run) and a secret scanner in CI.
 
 ### M7: penetration test tooling
 

@@ -18,10 +18,14 @@ Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    ProductionSafetyCheck.EnforceOrThrow(builder.Configuration, builder.Environment);   // outside Development: refuse unsafe settings
+    // preserveStaticLogger: the bootstrap logger above stays as it is (it reports a failed start), and each host gets its own logger.
+    // Without it, the first host to start "freezes" the shared bootstrap logger and a second host built at the same time
+    // fails with "The logger is already frozen", which is what happens when tests start several hosts in parallel.
     builder.Host.UseSerilog((ctx, cfg) => cfg
         .ReadFrom.Configuration(ctx.Configuration)
         .Enrich.FromLogContext()
-        .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter()));
+        .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter()), preserveStaticLogger: true);
 
     // Options are validated at startup: the app refuses to start on bad configuration.
     builder.Services.AddOptions<GatewayOptions>().BindConfiguration(GatewayOptions.Section).ValidateDataAnnotations().ValidateOnStart();
