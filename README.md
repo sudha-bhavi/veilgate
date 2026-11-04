@@ -611,13 +611,14 @@ Some safety rules are checked by the test suite on every run (and so by CI), so 
 
 **Done and tested:** CI (build, tests, dependency audit, secret scan), the production safety check, proxy support, images, the production
 compose stack, backup and restore-drill scripts, the operations runbook, the first-administrator command, the read-only Settings page,
-and four penetration-test findings found, fixed with tests, and retested (one-time codes, refresh rotation, account lockout under
-parallel guesses, refresh-reuse event).
+and five penetration-test findings found, fixed with tests, and retested except where noted (one-time codes, refresh rotation, account
+lockout under parallel guesses, a server error on a NUL character in a filter; the `refresh.reuse` security event is fixed and tested in
+code but its appearance on the Security page has not been checked by hand). One more is logged as an accepted Info observation.
 
 **Not done, on purpose or for lack of a deployment** (nothing is deployed; hosting costs money this project does not have):
-- **The penetration test is partly run.** Done: authentication races and lockout, role-by-role authorization with damaged tokens, and ten
-  business-rule checks (`docs/pentest/results.md`). Not done: the injection group, a meaningful tenant-isolation run, and the many
-  Document 06 scenarios that are not yet scripted. Document 06 is not in the repository, so the 62 scenarios are not mapped one by one.
+- **The penetration test is partly run.** Done: authentication races and lockout, role-by-role authorization with damaged tokens, ten
+  business-rule checks, and about 130 injection and input-handling requests (`docs/pentest/results.md`). Not done: a meaningful
+  tenant-isolation run (the one run had no data on either side), and the many Document 06 scenarios that are not yet scripted. Document 06 is not in the repository, so the 62 scenarios are not mapped one by one.
 - **ZAP** has a local script but its one run proved nothing (`docs/pentest/zap.md`).
 - **A burst of refused sign-ins can exhaust database connections** (HTTP 500s, no guess accepted); recorded in `docs/pentest/findings.md`.
 - **Auditors cannot read evaluations.** An existing test requires this; whether to change it is a security decision, not a fix.
