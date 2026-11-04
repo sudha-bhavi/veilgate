@@ -91,7 +91,7 @@ More of the console:
 | M5        | React console: sign-in, playground, policies, API clients, providers, evaluations, audit log, users | ✅ Done |
 | M5+       | Security page, read-only demo, invitations                                                          | ✅ Done |
 | M6        | Kafka outbox, workers, dashboards                                                                   | ✅ Done |
-| M7        | Hardening, pen test, deployment                                                                     | 🚧 In progress |
+| M7        | Hardening, pen test, deployment                                                                     | ✅ Built, with caveats (see "M7 status") |
 
 In the console, Settings is read-only: it shows the organisation and the server-wide sign-in and session rules (`GET /api/v1/settings`,
 Tenant Admins only). Renaming the organisation, a default policy and request-history retention are not built (the app's database role
@@ -606,6 +606,23 @@ Some safety rules are checked by the test suite on every run (and so by CI), so 
   cannot be left raised after a penetration test). The messages name the setting and the reason, never its value. Missing signing
   keys were already refused outside Development.
 - **Not done yet:** finishing the penetration test (the plan is Document 06; it has been started, see `docs/pentest/results.md`) and a ZAP web scan in CI.
+
+### M7 status: what is done and what is not
+
+**Done and tested:** CI (build, tests, dependency audit, secret scan), the production safety check, proxy support, images, the production
+compose stack, backup and restore-drill scripts, the operations runbook, the first-administrator command, the read-only Settings page,
+and four penetration-test findings found, fixed with tests, and retested (one-time codes, refresh rotation, account lockout under
+parallel guesses, refresh-reuse event).
+
+**Not done, on purpose or for lack of a deployment** (nothing is deployed; hosting costs money this project does not have):
+- **The penetration test is mostly unrun.** 5 of 62 scenarios have results (`docs/pentest/results.md`). The authorization,
+  business-logic and injection groups, and a meaningful tenant-isolation run, remain.
+- **ZAP** has a local script but its one run proved nothing (`docs/pentest/zap.md`).
+- **A burst of refused sign-ins can exhaust database connections** (HTTP 500s, no guess accepted); recorded in `docs/pentest/findings.md`.
+- **Auditors cannot read evaluations.** An existing test requires this; whether to change it is a security decision, not a fix.
+- **Settings is read-only**, and there is no automatic deletion of request history.
+- **Never exercised on a real machine:** the restore drill, a rollback, alerting, and a key vault. They are written down in
+  `docs/operations.md` but no one has run them.
 
 ### M7: penetration test tooling
 

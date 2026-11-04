@@ -112,6 +112,8 @@ public sealed class LlmProvider : TenantEntity
 
         var result = uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
         if (result.Length > MaxBaseUrlLength) return false;
+        // VeilGate adds "/v1/chat/completions" itself, so an address already ending in /v1 would be called as /v1/v1/... and fail.
+        if (result.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)) return false;
         normalized = result;
         return true;
     }
@@ -122,7 +124,7 @@ public sealed class LlmProvider : TenantEntity
     {
         var cleanName = (name ?? string.Empty).Trim();
         if (cleanName.Length is < 1 or > MaxNameLength) return Error.Validation("validation.failed", $"Name must be 1 to {MaxNameLength} characters.");
-        if (!TryNormalizeBaseUrl(baseUrl, out var url)) return Error.Validation("validation.failed", "Invalid provider URL.");
+        if (!TryNormalizeBaseUrl(baseUrl, out var url)) return Error.Validation("validation.failed", "Invalid provider URL. Give the address without a trailing /v1; VeilGate adds that part itself.");
         if (timeoutSeconds is < 1 or > MaxTimeoutSeconds)
             return Error.Validation("validation.failed", $"Timeout must be 1 to {MaxTimeoutSeconds} seconds.");
 
