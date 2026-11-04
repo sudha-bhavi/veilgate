@@ -471,6 +471,25 @@ one event on `vg.gateway.requests.v1`. The metrics consumer and the Requests pag
 - **Not every failure is announced.** A call that fails before it is audited (for example an unknown policy) is neither audited
   nor announced.
 
+### M6: the metrics consumer
+
+`MetricsAggregatorWorker` reads `vg.gateway.requests.v1` as the consumer group `vg-metrics-aggregator` and fills three tables:
+`gateway_requests` (one row per call, for the Requests page), `metrics_hourly` (counters per tenant, client and UTC hour, for the
+Dashboard) and `processed_messages`.
+
+- **Exactly-once effect from at-least-once delivery.** For each message one database transaction records the message id in
+  `processed_messages`, adds the request row and adds the event to the hour's counters. If the id is already there, the message
+  is skipped. A crash in the middle rolls everything back, and the message is read again.
+- **No lost updates.** The hour's row is locked (`SELECT ... FOR UPDATE`) while it is updated, so messages for the same hour
+  that arrive together are added one after the other.
+- **Offsets.** Auto-commit is off. The consumer commits a message's offset only after its transaction committed. If handling
+  fails, it seeks back to that message and retries after 1, 2, 4 ... up to 30 seconds.
+- **Bad messages.** A message that is not a valid event goes to `vg.gateway.requests.v1.dlq` with an `x-error` header and the
+  consumer moves on. A temporary failure (such as the database being down) is never dead-lettered; it is retried.
+- **Latency.** Stored as counts per band (up to 25, 50, 100, 250 ms and so on); p50 and p95 are worked out from the bands on read, and are
+  the upper limit of a band, not an exact time.
+- **Swappable.** The worker talks to `IEventConsumer`; Kafka is one implementation. With `Messaging:Transport` set to `InMemory` it reads nothing.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
@@ -488,6 +507,11 @@ Where this project departs from the design documents (which were drafted with AI
   a status column the documents do not have.
 - **Order on retry.** Messages with the same key are published in creation order, but a retried message can arrive after a later
   one. The metrics consumer does not depend on order.
+- **Latency as bands.** The documents have `p50_ms` and `p95_ms` columns in `metrics_hourly`. A percentile cannot be updated by
+  adding one call, so counts per latency band are stored instead and the percentiles are worked out when read.
+- **`gateway_requests` is not partitioned yet,** and is keyed by the message id (request ids are short and can repeat). It has a
+  `reason` column and holds user calls too (`actor_type`). Monthly partitioning can be added when the table is large.
+- **`processed_messages` has a `tenant_id`,** so it gets the same row-level security as other tables. The documents have none.
 - **Events follow the audit log.** The documents do not say which gateway calls are announced. Here it is exactly the ones that are
   audited, so the Requests page and the audit log agree.
 - **Fixed limits.** The 5 attempts, 60-second lease and 5-minute backoff cap are my choices; the documents only give the cap.
