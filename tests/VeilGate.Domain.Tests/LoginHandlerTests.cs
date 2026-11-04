@@ -27,6 +27,7 @@ public class LoginHandlerTests
         _clock.UtcNow.Returns(Now);
         _tokens.IssueMfaChallengeToken(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<DateTimeOffset?>()).Returns("mfa-token");
         _users.IsTenantActiveAsync(Arg.Any<CancellationToken>()).Returns(true);
+        _users.CountAttemptsInMemory();
     }
 
     private readonly IAuditWriter _audit = Substitute.For<IAuditWriter>();
@@ -68,7 +69,7 @@ public class LoginHandlerTests
     }
 
     [Fact]
-    public async Task Wrong_password_counts_a_failure_and_saves_it()
+    public async Task Wrong_password_counts_a_failure_before_the_check_in_one_atomic_step()
     {
         var u = GivenActiveUser();
         _hasher.Verify("bad", "stored-hash").Returns(false);
@@ -77,7 +78,7 @@ public class LoginHandlerTests
 
         r.Error.Should().Be(LoginHandler.InvalidCredentials);
         u.FailedAttempts.Should().Be(1);
-        await _users.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _users.Received(1).TryReserveLoginAttemptAsync(u, Now, Arg.Any<CancellationToken>());   // counted by the database, not by a later save
     }
 
     [Fact]

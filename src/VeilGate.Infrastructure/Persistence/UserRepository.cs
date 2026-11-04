@@ -55,6 +55,21 @@ public sealed class UserRepository(VeilGateDbContext db) : IUserRepository
         return (rows.Select(x => new UserListRow(x.User, x.HasMfa)).ToList(), total);
     }
 
+    public async Task<bool> TryReserveLoginAttemptAsync(User user, DateTimeOffset now, CancellationToken ct)
+    {
+        // One statement does the whole job, so concurrent requests queue on the row lock and each sees the count the previous one left.
+        // The WHERE clause is the "may this attempt go on?" test; the CASEs lock the account on the fifth attempt.
+        var lockSeconds = User.LockDuration.TotalSeconds;
+        var changed = await db.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE users SET
+                failed_attempts = CASE WHEN failed_attempts + 1 >= {User.MaxFailedAttempts} THEN 0 ELSE failed_attempts + 1 END,
+                locked_until    = CASE WHEN failed_attempts + 1 >= {User.MaxFailedAttempts} THEN {now} + make_interval(secs => {lockSeconds}) ELSE locked_until END,
+                updated_at      = {now}
+            WHERE id = {user.Id} AND (locked_until IS NULL OR locked_until <= {now})", ct);
+        await db.Entry(user).ReloadAsync(ct);   // so IsLocked, and the later "reset on success", work from the real values
+        return changed == 1;
+    }
+
     public Task<int> CountActiveAdminsExceptAsync(Guid exceptUserId, CancellationToken ct)
         => db.Users.CountAsync(u => u.Role == UserRole.TenantAdmin && u.Status == UserStatus.Active && u.Id != exceptUserId, ct);
 }

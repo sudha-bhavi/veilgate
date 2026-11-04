@@ -28,6 +28,7 @@ public class AccountSecurityHandlerTests
     public AccountSecurityHandlerTests()
     {
         _clock.UtcNow.Returns(Now);
+        _users.CountAttemptsInMemory();
         _hasher.Verify(Current, "stored-hash").Returns(true);
         _hasher.Hash(Fresh).Returns("new-hash");
     }

@@ -53,11 +53,18 @@ public sealed class StepUpHandler(
         if (factor is not { IsConfirmed: true })
             return Error.Forbidden("mfa.not_enrolled", "Set up MFA first.");
 
+        // Count this attempt first, atomically; only then check the code (see TryReserveLoginAttemptAsync).
+        if (!await users.TryReserveLoginAttemptAsync(user, now, ct))
+        {
+            await auditor.DeniedAsync(user, AuthAuditor.StepUp, cmd.Ip, ct);
+            return LoginHandler.AccountLocked;
+        }
+
         string method;
         if (RecoveryCodes.Normalize(cmd.Code).Length == RecoveryCodeLength)
         {
             var stored = await recoveryCodeStore.FindByHashAsync(user.Id, RecoveryCodes.Hash(cmd.Code), ct);
-            if (stored is null || stored.MarkUsed(now).IsFailure)
+            if (stored is null || !await recoveryCodeStore.TrySpendAsync(stored, now, ct))   // atomic: two requests cannot both spend it
                 return await RejectAsync(user, now, "recovery_code", cmd.Ip, ct);
 
             method = "recovery";
@@ -68,12 +75,13 @@ public sealed class StepUpHandler(
             var window = Totp.Verify(secret, cmd.Code, now.ToUnixTimeSeconds(), factor.LastUsedCounter);
             if (window is null) return await RejectAsync(user, now, "code", cmd.Ip, ct);
 
-            var used = factor.RecordUse(window.Value, now);   // remember the window so this code can't be replayed
-            if (used.IsFailure) return used.Error;
+            // Remember the window so this code can't be replayed. Atomic: two requests with the same code cannot both pass.
+            if (!await factors.TryRecordUseAsync(factor, window.Value, now, ct)) return MfaFactor.CodeReused;
 
             method = "otp";
         }
 
+        user.ClearFailedAttempts(now);        // attempts are counted before the check, so a correct code forgives them
         await factors.SaveChangesAsync(ct);   // one DbContext per request: this also saves a used recovery code
         await auditor.SucceededAsync(user.TenantId, user.Id, AuthAuditor.StepUp, cmd.Ip, method, ct);
 
@@ -90,8 +98,6 @@ public sealed class StepUpHandler(
     // A wrong code counts like a wrong password: 5 in a row lock the account for 15 minutes.
     private async Task<Result<StepUpResult>> RejectAsync(User user, DateTimeOffset now, string reason, string? ip, CancellationToken ct)
     {
-        user.RegisterFailedLogin(now);
-        await users.SaveChangesAsync(ct);
         await auditor.FailedAsync(user, AuthAuditor.StepUp, reason, ip, ct);
         return ConfirmTotpHandler.InvalidCode;
     }

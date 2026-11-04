@@ -42,10 +42,15 @@ public sealed class ChangePasswordHandler(
             return Result.Failure(LoginHandler.AccountLocked);
         }
 
+        // Count this attempt first, atomically; only then check the password (see TryReserveLoginAttemptAsync).
+        if (!await users.TryReserveLoginAttemptAsync(user, now, ct))
+        {
+            await auditor.DeniedAsync(user, AuthAuditor.PasswordChange, cmd.Ip, ct);
+            return Result.Failure(LoginHandler.AccountLocked);
+        }
+
         if (user.PasswordHash is null || !hasher.Verify(cmd.CurrentPassword, user.PasswordHash))
         {
-            user.RegisterFailedLogin(now);
-            await users.SaveChangesAsync(ct);
             await auditor.FailedAsync(user, AuthAuditor.PasswordChange, "password", cmd.Ip, ct);
             return Result.Failure(CurrentIncorrect);
         }

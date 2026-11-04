@@ -50,6 +50,9 @@ public sealed class Session : TenantEntity
         return s;
     }
 
+    /// <summary>True when this is the newest refresh token (not an older one that was already swapped out).</summary>
+    public bool IsCurrentToken(string presentedHash) => SameHash(presentedHash, CurrentRefreshHash);
+
     public bool IsActive(DateTimeOffset now) =>
         RevokedAt is null && now < ExpiresAt && now < LastSeenAt + IdleTimeout;
 

@@ -15,6 +15,16 @@ public sealed record SessionState(DateTimeOffset? RevokedAt, DateTimeOffset Expi
 public interface ISessionRepository
 {
     void Add(Session session);
+
+    /// <summary>
+    /// Swaps the session's refresh token in ONE atomic step: true only for the single caller whose presented token was still the current one.
+    /// If eight requests present the same token at the same moment, exactly one gets true; the others get false and must be treated as
+    /// a replay (each would otherwise be handed its own new token, and a stolen token would be as good as the real one). The default is the
+    /// in-memory version, for hand-written test doubles (a mocking library replaces it, so tests that mock this interface set the method up
+    /// themselves); the database repository replaces it with a conditional UPDATE.
+    /// </summary>
+    Task<bool> TryRotateAsync(Session session, string presentedHash, string newHash, DateTimeOffset now, CancellationToken ct) =>
+        Task.FromResult(session.Rotate(presentedHash, newHash, now).IsSuccess);
         /// <summary>Runs BEFORE a tenant is set: finds which tenant owns this refresh token, through the lookup function.</summary>
     Task<Guid?> FindTenantByRefreshHashAsync(string refreshHash, CancellationToken ct);
 

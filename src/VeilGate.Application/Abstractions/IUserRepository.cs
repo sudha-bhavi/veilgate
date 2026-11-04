@@ -25,6 +25,21 @@ public interface IUserRepository
     /// <summary>How many Active Tenant Admins the tenant has, not counting one person. Used to protect the last admin.</summary>
     Task<int> CountActiveAdminsExceptAsync(Guid exceptUserId, CancellationToken ct);
 
+    /// <summary>
+    /// Reserves one sign-in attempt BEFORE the password or code is checked, in ONE atomic step: counts the attempt, locks the account when it
+    /// was the fifth in a row, and says whether this attempt may go on to be checked (false when the account is already locked). Because the
+    /// counting happens first and in the database, 100 requests sent at the same moment get exactly five checks between them; counting after
+    /// the check (read, check, then add one) lets every one of them through. The user object is refreshed from the database afterwards. The
+    /// default is the in-memory version, for hand-written test doubles (a mocking library replaces it, so tests that mock this interface set
+    /// the method up themselves); the database repository replaces it with a single conditional UPDATE.
+    /// </summary>
+    Task<bool> TryReserveLoginAttemptAsync(User user, DateTimeOffset now, CancellationToken ct)
+    {
+        if (user.IsLocked(now)) return Task.FromResult(false);
+        user.RegisterFailedLogin(now);
+        return Task.FromResult(true);
+    }
+
     /// <summary>Cheap check run on every authenticated request: has the token been invalidated?</summary>
     Task<UserTokenState?> GetTokenStateAsync(Guid userId, CancellationToken ct);
 

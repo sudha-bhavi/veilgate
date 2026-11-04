@@ -17,6 +17,13 @@ public sealed class SessionRepository(VeilGateDbContext db) : ISessionRepository
         return rows.FirstOrDefault();
     }
 
+    public async Task<bool> TryRotateAsync(Session session, string presentedHash, string newHash, DateTimeOffset now, CancellationToken ct) =>
+        await db.Sessions.Where(s => s.Id == session.Id && s.CurrentRefreshHash == presentedHash && s.RevokedAt == null)
+            .ExecuteUpdateAsync(u => u
+                .SetProperty(s => s.PreviousRefreshHash, presentedHash)
+                .SetProperty(s => s.CurrentRefreshHash, newHash)
+                .SetProperty(s => s.LastSeenAt, now), ct) == 1;
+
     public Task<Session?> FindByRefreshHashAsync(string refreshHash, CancellationToken ct) =>
         db.Sessions.FirstOrDefaultAsync(s => s.CurrentRefreshHash == refreshHash || s.PreviousRefreshHash == refreshHash, ct);
 
