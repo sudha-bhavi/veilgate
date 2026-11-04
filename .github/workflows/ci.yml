@@ -78,6 +78,21 @@ jobs:
       - name: Build the image
         run: docker build -f deploy/Dockerfile.api -t veilgate-api:ci .
 
+  pentest-tooling:
+    name: Pen-test helper tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The helpers must be right, or a bug in the tester could be mistaken for a bug in VeilGate.
+      - name: Test the helpers
+        run: python3 -m unittest discover -s tools/pentest -p "test_*.py"
+
   dependency-audit:
     name: Dependency audit
     runs-on: ubuntu-latest

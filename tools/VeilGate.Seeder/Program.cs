@@ -13,6 +13,7 @@ if (!arguments.TryGetValue("--connection", out var connection) || !arguments.Try
 {
     Console.Error.WriteLine("""
         Usage: dotnet run --project tools/VeilGate.Seeder -- --connection "<vg_migrator connection string>" --password "<at least 12 characters>"
+               [--tenant "Beta Clinic" --domain beta.test]   a second organisation (people only, no sample content), for isolation tests
         """);
     return 1;
 }
@@ -32,7 +33,11 @@ if (password.Length < 12)
 var options = new DbContextOptionsBuilder<VeilGateDbContext>().UseNpgsql(connection).Options;
 await using var db = new VeilGateDbContext(options);
 
-const string tenantName = "Acme Health";
+// Without options this is the demo organisation. A second one (Beta Clinic) gets only its people: the sample content and the
+// demo visitor belong to Acme Health, and the demo user's email must stay unique across the whole system.
+const string DemoTenant = "Acme Health";
+var tenantName = arguments.GetValueOrDefault("--tenant", DemoTenant);
+var domain = arguments.GetValueOrDefault("--domain", "acme.test");
 var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Name == tenantName);
 if (tenant is null)
 {
@@ -46,10 +51,10 @@ var hash = new Argon2PasswordHasher().Hash(password);
 var now = DateTimeOffset.UtcNow;
 (string Email, string Name, UserRole Role)[] people =
 [
-    ("admin@acme.test", "Alex Admin", UserRole.TenantAdmin),
-    ("security@acme.test", "Sam Security", UserRole.SecurityOfficer),
-    ("dev@acme.test", "Dana Developer", UserRole.Developer),
-    ("auditor@acme.test", "Ari Auditor", UserRole.Auditor),
+    ($"admin@{domain}", "Alex Admin", UserRole.TenantAdmin),
+    ($"security@{domain}", "Sam Security", UserRole.SecurityOfficer),
+    ($"dev@{domain}", "Dana Developer", UserRole.Developer),
+    ($"auditor@{domain}", "Ari Auditor", UserRole.Auditor),
 ];
 
 foreach (var (email, name, role) in people)
@@ -68,7 +73,13 @@ foreach (var (email, name, role) in people)
 
 await db.SaveChangesAsync();
 
-var admin = await db.Users.FirstAsync(u => u.Email == "admin@acme.test");
-var officer = await db.Users.FirstAsync(u => u.Email == "security@acme.test");
+if (tenantName != DemoTenant)
+{
+    Console.WriteLine($"no sample content for {tenantName}");
+    return 0;
+}
+
+var admin = await db.Users.FirstAsync(u => u.Email == $"admin@{domain}");
+var officer = await db.Users.FirstAsync(u => u.Email == $"security@{domain}");
 await DemoContent.SeedAsync(db, tenant, admin, officer, now);
 return 0;

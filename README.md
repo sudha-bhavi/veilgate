@@ -596,6 +596,23 @@ Some safety rules are checked by the test suite on every run (and so by CI), so 
 - **Not done yet:** the penetration test itself (the plan is Document 06; nothing here claims it has been run), a secret scanner in CI,
   and a startup check that refuses dangerous settings in production.
 
+### M7: penetration test tooling
+
+`docs/pentest/` and `tools/pentest/` make the penetration test plan (Document 06) runnable. **The test has not been run**: the result
+sheet and the findings log are empty on purpose, and nothing here claims the system has been pen tested.
+
+- **A runbook** (`docs/pentest/README.md`): rules (your own system only, synthetic data only), setup in about 15 minutes, a day-by-day
+  order, how to record results, and where this build differs from the plan (for example, no CSRF token: the refresh cookie relies on
+  `SameSite=Strict`).
+- **A result sheet** with all 62 scenarios (`results.md`) and a **findings log** template (`findings.md`) with the severity scale.
+- **Scripts** (Python 3, standard library only) for the scenarios that need many requests at the same instant or several accounts: the
+  refresh-token reuse and race, one-time-code replay and window, a recovery code used twice at once, and tenant isolation (each
+  organisation tries to list and open the other's data). They sign in using authenticator secrets saved in a git-ignored folder, and
+  refuse any address that is not `localhost`.
+- **Two dedicated test organisations** ("Pentest Alpha" and "Pentest Beta", made with `--tenant` and `--domain` on the seeder), so testing
+  never touches the demo organisation.
+- The helpers have their own unit tests (RFC 6238 one-time-password vectors, parallel firing, the local-only guard) that run in CI.
+
 ### Decisions
 
 Where this project departs from the design documents (which were drafted with AI help and are not a fixed contract):
@@ -613,6 +630,10 @@ Where this project departs from the design documents (which were drafted with AI
   a status column the documents do not have.
 - **Order on retry.** Messages with the same key are published in creation order, but a retried message can arrive after a later
   one. The metrics consumer does not depend on order.
+- **No CSRF token.** The penetration test plan expects `403 csrf.invalid` on the cookie endpoints. Here the refresh cookie is
+  `HttpOnly; Secure; SameSite=Strict` and scoped to `/api/v1/auth`, so a cross-site page cannot make the browser send it, and CORS
+  allows exact origins only. The pen-test runbook says to test it anyway and record the result as a pass with a note or as an accepted
+  risk, not to mark it passed silently.
 - **HSTS is a setting, off by default.** The documents ask for it unconditionally. Sent over plain HTTP it does nothing, and a browser
   that has remembered it for a year cannot easily be switched back, so a deployment turns it on (`SecurityHeaders__Hsts=true`) once
   HTTPS works.
