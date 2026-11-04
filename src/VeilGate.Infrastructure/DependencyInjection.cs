@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditEventReader, AuditEventReader>();
         services.AddScoped<IOutbox, EfOutbox>();
         services.AddScoped<IOutboxStore, Messaging.PostgresOutboxStore>();
+        services.AddSingleton<IGatewayEventProjector, Messaging.GatewayEventProjector>();
         services.AddScoped<ISecurityEventWriter, SecurityEventWriter>();
         services.AddScoped<ISecurityEventReader, SecurityEventReader>();
                 services.AddOptions<SmtpOptions>().BindConfiguration(SmtpOptions.Section);
