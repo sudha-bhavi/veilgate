@@ -94,8 +94,11 @@ jobs:
       - name: The production compose file parses (with the example values)
         run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod.example config --quiet
 
-      - name: The secrets script is valid shell
-        run: bash -n deploy/scripts/generate-secrets.sh
+      - name: The scripts are valid shell
+        run: |
+          bash -n deploy/scripts/generate-secrets.sh
+          bash -n deploy/scripts/backup.sh
+          bash -n deploy/scripts/restore-drill.sh
 
       # Runs the real script and checks that what it writes gives a valid stack and sensible secrets.
       - name: The secrets script writes a complete env file
@@ -112,6 +115,52 @@ jobs:
           test "$(grep '^MFA_ENCRYPTION_KEY=' deploy/.env.prod | cut -d= -f2- | base64 -d | wc -c)" = "32"
           grep -q "BEGIN EC PRIVATE KEY" deploy/.env.prod
           ! bash deploy/scripts/generate-secrets.sh veilgate.example.com ops@example.com   # refuses to overwrite
+
+  restore-drill:
+    name: Backup and restore drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COMPOSE: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod
+      BACKUPS: ${{ runner.temp }}/vg-backups
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bring up the database and apply the migrations
+        run: |
+          bash deploy/scripts/generate-secrets.sh veilgate.example.com ops@example.com
+          sed -i 's/^SMTP_HOST=$/SMTP_HOST=smtp.example.com/' deploy/.env.prod
+          $COMPOSE up -d --build postgres migrate
+          test "$(docker wait "$($COMPOSE ps -aq migrate)")" = "0"
+
+      - name: Put something in the database to protect
+        run: |
+          $COMPOSE exec -T postgres psql -U postgres -d veilgate -c "insert into tenants (id, name, status, created_at) values (gen_random_uuid(), 'Drill Org', 'Active', now())"
+
+      - name: A backup is written, checked, and old ones are removed
+        run: |
+          mkdir -p "$BACKUPS"
+          touch -d '40 days ago' "$BACKUPS/veilgate-20200101T000000Z.dump" "$BACKUPS/veilgate-20200101T000000Z.dump.sha256"
+          bash deploy/scripts/backup.sh "$BACKUPS"
+          test "$(ls "$BACKUPS"/veilgate-2*.dump | wc -l | tr -d ' ')" = "1"
+          test ! -e "$BACKUPS/veilgate-20200101T000000Z.dump"
+          test "$(stat -c %a "$(ls "$BACKUPS"/veilgate-2*.dump)")" = "600"
+
+      - name: The backup restores, and security survives the restore
+        run: bash deploy/scripts/restore-drill.sh "$(ls -1t "$BACKUPS"/veilgate-*.dump | head -1)"
+
+      - name: A damaged backup is caught
+        run: |
+          copy="$BACKUPS/damaged.dump"
+          cp "$(ls -1t "$BACKUPS"/veilgate-*.dump | head -1)" "$copy"
+          cp "$(ls -1t "$BACKUPS"/veilgate-*.dump.sha256 | head -1)" "$copy.sha256"
+          sed -i "s/veilgate-[0-9TZ]*\.dump/damaged.dump/" "$copy.sha256"
+          printf 'garbage' >> "$copy"
+          ! bash deploy/scripts/restore-drill.sh "$copy"
+
+      - name: Clean up
+        if: always()
+        run: $COMPOSE down -v
 
   pentest-tooling:
     name: Pen-test helper tests
