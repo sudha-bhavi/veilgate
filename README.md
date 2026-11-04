@@ -615,8 +615,9 @@ and four penetration-test findings found, fixed with tests, and retested (one-ti
 parallel guesses, refresh-reuse event).
 
 **Not done, on purpose or for lack of a deployment** (nothing is deployed; hosting costs money this project does not have):
-- **The penetration test is mostly unrun.** 5 of 62 scenarios have results (`docs/pentest/results.md`). The authorization,
-  business-logic and injection groups, and a meaningful tenant-isolation run, remain.
+- **The penetration test is partly run.** Done: authentication races and lockout, role-by-role authorization with damaged tokens, and ten
+  business-rule checks (`docs/pentest/results.md`). Not done: the injection group, a meaningful tenant-isolation run, and the many
+  Document 06 scenarios that are not yet scripted. Document 06 is not in the repository, so the 62 scenarios are not mapped one by one.
 - **ZAP** has a local script but its one run proved nothing (`docs/pentest/zap.md`).
 - **A burst of refused sign-ins can exhaust database connections** (HTTP 500s, no guess accepted); recorded in `docs/pentest/findings.md`.
 - **Auditors cannot read evaluations.** An existing test requires this; whether to change it is a security decision, not a fix.
