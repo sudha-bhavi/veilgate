@@ -125,9 +125,12 @@ jobs:
     timeout-minutes: 25
     env:
       COMPOSE: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod
-      BACKUPS: ${{ runner.temp }}/vg-backups
     steps:
       - uses: actions/checkout@v4
+
+      # The job-level env block cannot read the runner context, so the backup folder is set from a step.
+      - name: Choose the backup folder
+        run: echo "BACKUPS=$RUNNER_TEMP/vg-backups" >> "$GITHUB_ENV"
 
       - name: Bring up the database and apply the migrations
         run: |
