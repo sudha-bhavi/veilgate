@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The SDK version comes from global.json, so CI builds with the same one as your machine.
       - uses: actions/setup-dotnet@v4
@@ -46,7 +46,7 @@ jobs:
       run:
         working-directory: src/VeilGate.Web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Built, not pushed anywhere: this only proves the images still build.
       - name: Build the API image
@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: The production compose file parses (with the example values)
         run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod.example config --quiet
@@ -126,7 +126,7 @@ jobs:
     env:
       COMPOSE: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The job-level env block cannot read the runner context, so the backup folder is set from a step.
       - name: Choose the backup folder
@@ -181,7 +181,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -199,7 +199,7 @@ jobs:
     # Once the audit is clean, delete this line to make it a gate.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -231,7 +231,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # The whole history, not just the latest commit: a secret that was committed and then deleted is still public.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
