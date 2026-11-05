@@ -69,6 +69,29 @@ More of the console:
 
 ![Security: the places a person is signed in, with tabs for MFA, password and security events](docs/screenshots/security.png)
 
+## Design decisions
+
+Why the main pieces are built the way they are:
+
+- **Row-level security instead of `WHERE tenant_id = ...` in code.** A forgotten filter in application code leaks another
+  customer's data. With PostgreSQL row-level security the database itself refuses, and the app connects as a role
+  (`vg_app`) that cannot bypass it. The few lookups that must run before a tenant is known (sign-in, refresh) use narrow
+  `SECURITY DEFINER` functions that return one value.
+- **Reversible tokens, not just redaction.** Redaction destroys the value, so the model's answer cannot be put back into
+  the user's context. Tokenizing with a per-tenant AES-256-GCM key lets the answer be restored while the provider
+  never sees the original.
+- **Refresh-token rotation with reuse detection.** Each refresh issues a new token and keeps the previous hash. Presenting
+  an old token means a copy was stolen, so the whole session is ended.
+- **A hash-chained audit log that stores counts and ids, never text.** Each row includes the hash of the one before it,
+  so an edit or deletion is detectable, and the log itself can never become a second place where PHI leaks.
+- **A transactional outbox for events.** The gateway writes the event in the same database transaction as the work, and a
+  publisher sends it to Kafka afterwards. No event is lost if the broker is down, and the idempotent consumer makes
+  retries safe.
+- **Approval by a different person.** Publishing a policy needs a second user and a fresh second-factor check, so one
+  compromised account cannot weaken what gets masked.
+
+Known gaps are listed honestly under "M7 status" and in `docs/pentest/`.
+
 ## Tech stack
 
 | Area     | What                                                                                          |
@@ -743,3 +766,7 @@ Where this project departs from the design documents (which were drafted with AI
   audited, so the Requests page and the audit log agree.
 - **Fixed limits.** The 5 attempts, 60-second lease and 5-minute backoff cap are my choices; the documents only give the cap.
   All are settings under `Outbox`.
+
+## License
+
+MIT. See [LICENSE](LICENSE). All data in this project is synthetic.
