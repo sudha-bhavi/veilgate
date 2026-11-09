@@ -2,6 +2,10 @@
 
 [![CI](https://github.com/sudha-bhavi/veilgate/actions/workflows/ci.yml/badge.svg)](https://github.com/sudha-bhavi/veilgate/actions/workflows/ci.yml)
 
+[![Watch the 90-second demo](https://img.youtube.com/vi/4_N9H2Wub1o/hqdefault.jpg)](https://youtu.be/4_N9H2Wub1o)
+
+**Watch the 90-second demo:** https://youtu.be/4_N9H2Wub1o (runs locally, synthetic data)
+
 A multi-tenant gateway that finds protected health information (PHI) in text, replaces it according to a policy,
 sends only the sanitized text to an LLM, and restores the values in the answer.
 
