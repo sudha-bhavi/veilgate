@@ -16,7 +16,7 @@ RUN RID=$( [ "$TARGETARCH" = "arm64" ] && echo linux-arm64 || echo linux-x64 ) \
  && dotnet ef migrations bundle --project src/VeilGate.Infrastructure --startup-project src/VeilGate.Api \
       --self-contained -r "$RID" --output /out/efbundle --force
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS final
+FROM mcr.microsoft.com/dotnet/runtime-deps:11.0 AS final
 WORKDIR /app
 COPY --from=build /out/efbundle .
 # A single-file program unpacks native parts at start. The user's home folder does not exist in this image, so use /tmp.
