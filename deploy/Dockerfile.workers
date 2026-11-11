@@ -1,6 +1,6 @@
 # The background workers: outbox publisher, metrics aggregator, evaluation runner, vault purger and session reaper.
 # Built from the repository root:  docker build -f deploy/Dockerfile.workers -t veilgate-workers .
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
 COPY Directory.Build.props global.json ./
 COPY src ./src

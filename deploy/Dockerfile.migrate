@@ -3,7 +3,7 @@
 #
 # Built from the repository root:  docker build -f deploy/Dockerfile.migrate -t veilgate-migrate .
 # Run it with VEILGATE_MIGRATOR_CONNECTION set to the vg_migrator connection string (the schema owner, never vg_app).
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 ARG TARGETARCH
 WORKDIR /src
 COPY .config ./.config
