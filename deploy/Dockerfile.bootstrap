@@ -9,7 +9,7 @@ COPY tools/VeilGate.Bootstrap ./tools/VeilGate.Bootstrap
 RUN dotnet restore tools/VeilGate.Bootstrap/VeilGate.Bootstrap.csproj
 RUN dotnet publish tools/VeilGate.Bootstrap/VeilGate.Bootstrap.csproj -c Release -o /out --no-restore /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 WORKDIR /app
 COPY --from=build /out .
 # The database driver looks for the Kerberos library at start-up. It is optional, but without it every run prints a scary-looking error.
