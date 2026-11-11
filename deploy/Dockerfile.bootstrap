@@ -1,7 +1,7 @@
 # One-time setup tool: creates the first organisation and its first administrator (see tools/VeilGate.Bootstrap).
 # Built from the repository root:  docker build -f deploy/Dockerfile.bootstrap -t veilgate-bootstrap .
 # Run through compose, which supplies the schema owner's connection:  see docs/operations.md, "Create the first administrator".
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
 COPY Directory.Build.props global.json ./
 COPY src ./src
